@@ -1,0 +1,4 @@
+# Make Codeowners not comment on PRs whenever a PR is created
+CODEOWNERS.toplevel.create_pull_request_comment disable
+
+* @@"Crypto Team"

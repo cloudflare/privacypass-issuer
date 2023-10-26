@@ -1,0 +1,15 @@
+{
+    "extends": "../tsconfig.json",
+    "compilerOptions": {
+		"esModuleInterop": true,
+        "types": [
+            "@cloudflare/workers-types",
+            "jest",
+            "jest-environment-miniflare/globals"
+        ]
+    },
+    "include": [
+        "../src",
+        ".",
+    ]
+}
