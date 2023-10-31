@@ -4,7 +4,7 @@ import { JSONResponse } from './utils/jsonResponse';
 export async function handleError(ctx: Context, error: Error) {
 	console.error(error.stack);
 
-	ctx.metrics.erroredRequestsTotal.inc();
+	ctx.metrics.erroredRequestsTotal.inc({ env: ctx.env.ENVIRONMENT });
 
 	const status = (error as HTTPError).status ?? 500;
 	const message = error.message || 'Server Error';

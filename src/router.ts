@@ -107,7 +107,7 @@ export class Router {
 		ectx: ExecutionContext
 	): Promise<Response> {
 		const ctx = this.buildContext(request, env, ectx);
-		ctx.metrics.requestsTotal.inc();
+		ctx.metrics.requestsTotal.inc({ env: ctx.env.ENVIRONMENT });
 		const rawPath = new URL(request.url).pathname;
 		const path = this.normalisePath(rawPath);
 
