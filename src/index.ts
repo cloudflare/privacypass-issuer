@@ -4,12 +4,33 @@ import { Router } from './router';
 import { HeaderNotDefinedError } from './errors';
 import { IssuerConfigurationResponse, TokenType } from './types';
 import { b64ToB64URL, b64Tou8, b64URLtoB64, u8ToB64 } from './utils/base64';
-import { Issuer, TOKEN_TYPES, TokenRequest, util } from '@cloudflare/privacypass-ts';
+import {
+	Issuer,
+	MediaType,
+	PRIVATE_TOKEN_ISSUER_DIRECTORY,
+	TOKEN_TYPES,
+	TokenRequest,
+	util,
+} from '@cloudflare/privacypass-ts';
+import { ConsoleLogger } from './context/logging';
+import { MetricsRegistry } from './context/metrics';
+
+const keyToTokenKeyID = async (key: Uint8Array): Promise<number> => {
+	const hash = await crypto.subtle.digest('SHA-256', key);
+	const u8 = new Uint8Array(hash);
+	return u8[u8.length - 1];
+};
+
+interface StorageMetadata extends Record<string, string> {
+	version: string;
+	publicKey: string;
+	tokenKeyID: string;
+}
 
 export const handleTokenRequest = async (ctx: Context, request: Request) => {
 	const contentType = request.headers.get('content-type');
-	if (!contentType || contentType !== 'application/private-token-request') {
-		throw new HeaderNotDefinedError('"Content-Type" must be "application/private-token-request"');
+	if (!contentType || contentType !== MediaType.PRIVATE_TOKEN_REQUEST) {
+		throw new HeaderNotDefinedError(`"Content-Type" must be "${MediaType.PRIVATE_TOKEN_REQUEST}"`);
 	}
 
 	const buffer = await request.arrayBuffer();
@@ -19,15 +40,15 @@ export const handleTokenRequest = async (ctx: Context, request: Request) => {
 		throw new Error('Invalid token type');
 	}
 
-	const latest = await ctx.env.ISSUANCE_KEYS.get('latest');
+	const key = await ctx.env.ISSUANCE_KEYS.get(tokenRequest.tokenKeyId.toString());
 
-	if (latest === null) {
+	if (key === null) {
 		throw new Error('Issuer not initialised');
 	}
 
 	const sk = await crypto.subtle.importKey(
 		'pkcs8',
-		await latest.arrayBuffer(),
+		await key.arrayBuffer(),
 		{
 			name: 'RSA-PSS',
 			hash: 'SHA-384',
@@ -36,7 +57,7 @@ export const handleTokenRequest = async (ctx: Context, request: Request) => {
 		true,
 		['sign']
 	);
-	const pkEnc = latest?.customMetadata?.publicKey;
+	const pkEnc = key?.customMetadata?.publicKey;
 	if (!pkEnc) {
 		throw new Error('Issuer not initialised');
 	}
@@ -52,66 +73,99 @@ export const handleTokenRequest = async (ctx: Context, request: Request) => {
 	const signedToken = await issuer.issue(tokenRequest);
 
 	return new Response(signedToken.serialize(), {
-		headers: { 'content-type': 'application/private-token-response' },
+		headers: { 'content-type': MediaType.PRIVATE_TOKEN_RESPONSE },
 	});
 };
 
-export const handleTokenDirectory = async (ctx: Context, request: Request) => {
-	const latest = await ctx.env.ISSUANCE_KEYS.head('latest');
-	const publicKey = latest?.customMetadata?.publicKey;
+export const handleTokenDirectory = async (ctx: Context, request?: Request) => {
+	const keys = await ctx.env.ISSUANCE_KEYS.list({ include: ['customMetadata'] });
 
-	if (!publicKey) {
+	if (keys.objects.length === 0) {
 		throw new Error('Issuer not initialised');
 	}
 
 	const directory: IssuerConfigurationResponse = {
 		'issuer-request-uri': '/token-request',
-		'token-keys': [
-			{
-				'token-type': TokenType.BlindRSA,
-				'token-key': publicKey,
-				'not-before': latest.uploaded.getTime(),
-			},
-		],
+		'token-keys': keys.objects.map(key => ({
+			'token-type': TokenType.BlindRSA,
+			'token-key': (key.customMetadata as StorageMetadata).publicKey,
+			'not-before': key.uploaded.getTime(),
+		})),
 	};
 
 	return new Response(JSON.stringify(directory), {
 		headers: {
-			'content-type': 'application/private-token-issuer-directory',
+			'content-type': MediaType.PRIVATE_TOKEN_ISSUER_DIRECTORY,
 			'cache-control': 'public, max-age=86400',
 		},
 	});
 };
 
-export const handleRotateKey = async (ctx: Context, request: Request) => {
+export const handleRotateKey = async (ctx: Context, request?: Request) => {
+	ctx.metrics.keyRotationTotal.inc({ env: ctx.env.ENVIRONMENT });
+
 	// Generate a new type 2 Issuer key
-	const keypair = (await crypto.subtle.generateKey(
-		{
-			name: 'RSA-PSS',
-			modulusLength: 2048,
-			publicExponent: new Uint8Array([1, 0, 1]),
-			hash: { name: 'SHA-384' },
-		},
-		true,
-		['sign', 'verify']
-	)) as CryptoKeyPair;
-	const publicKey = new Uint8Array(
-		(await crypto.subtle.exportKey('spki', keypair.publicKey)) as ArrayBuffer
-	);
-	const publicKeyEnc = b64ToB64URL(u8ToB64(util.convertEncToRSASSAPSS(publicKey)));
-	const privateKey = (await crypto.subtle.exportKey('pkcs8', keypair.privateKey)) as ArrayBuffer;
+	let publicKeyEnc: string;
+	let tokenKeyID: number;
+	let privateKey: ArrayBuffer;
+	do {
+		const keypair = (await crypto.subtle.generateKey(
+			{
+				name: 'RSA-PSS',
+				modulusLength: 2048,
+				publicExponent: new Uint8Array([1, 0, 1]),
+				hash: { name: 'SHA-384' },
+			},
+			true,
+			['sign', 'verify']
+		)) as CryptoKeyPair;
+		const publicKey = new Uint8Array(
+			(await crypto.subtle.exportKey('spki', keypair.publicKey)) as ArrayBuffer
+		);
+		publicKeyEnc = b64ToB64URL(u8ToB64(util.convertEncToRSASSAPSS(publicKey)));
+		tokenKeyID = await keyToTokenKeyID(new TextEncoder().encode(publicKeyEnc));
+		privateKey = (await crypto.subtle.exportKey('pkcs8', keypair.privateKey)) as ArrayBuffer;
+		// The bellow condition ensure there is no collision between truncated_token_key_id provided by the issuer
+		// This is a 1/256 with 2 keys, and 256/256 chances with 256 keys. This means an issuer cannot have more than 256 keys at the same time.
+		// Otherwise, this loop is going to be infinite. With 255 keys, this iteration might take a while.
+	} while ((await ctx.env.ISSUANCE_KEYS.head(tokenKeyID.toString())) !== null);
 
 	// check if it's the initialisation phase
 	const latest = await ctx.env.ISSUANCE_KEYS.head('latest');
 	const version = latest?.customMetadata?.version ?? '0';
 	const next = Number.parseInt(version) + 1;
 
-	await ctx.env.ISSUANCE_KEYS.put(next.toString(), privateKey);
-	await ctx.env.ISSUANCE_KEYS.put('latest', privateKey, {
-		customMetadata: { version: next.toString(), publicKey: publicKeyEnc },
+	const metadata: StorageMetadata = {
+		version: next.toString(),
+		publicKey: publicKeyEnc,
+		tokenKeyID: tokenKeyID.toString(),
+	};
+
+	await ctx.env.ISSUANCE_KEYS.put(tokenKeyID.toString(), privateKey, {
+		customMetadata: metadata,
 	});
 
 	return new Response(`New key ${publicKeyEnc}`, { status: 201 });
+};
+
+const handleClearKey = async (ctx: Context, request?: Request) => {
+	ctx.metrics.keyClearTotal.inc({ env: ctx.env.ENVIRONMENT });
+	const keys = await ctx.env.ISSUANCE_KEYS.list();
+
+	let latestKey: R2Object = keys.objects[0];
+	const toDelete: string[] = [];
+
+	// only keep the latest key
+	for (const key of keys.objects) {
+		if (latestKey.uploaded < key.uploaded) {
+			toDelete.push(latestKey.key);
+			latestKey = key;
+		} else if (!toDelete.includes(key.key)) {
+			toDelete.push(key.key);
+		}
+	}
+	await ctx.env.ISSUANCE_KEYS.delete(toDelete);
+	return new Response(`Keys cleared: ${toDelete.join('\n')}`, { status: 201 });
 };
 
 export default {
@@ -121,14 +175,32 @@ export default {
 		const router = new Router();
 
 		router
-			.get('/.well-known/private-token-issuer-directory', handleTokenDirectory)
+			.get(PRIVATE_TOKEN_ISSUER_DIRECTORY, handleTokenDirectory)
 			.post('/token-request', handleTokenRequest)
-			.post('/admin/rotate', handleRotateKey);
+			.post('/admin/rotate', handleRotateKey)
+			.post('/admin/clear', handleClearKey);
 
 		return router.handle(
 			request as Request<Bindings, IncomingRequestCfProperties<unknown>>,
 			env,
 			ctx
 		);
+	},
+
+	async scheduled(event: ScheduledEvent, env: Bindings, ectx: ExecutionContext) {
+		const ctx = new Context(
+			env,
+			ectx.waitUntil.bind(ectx),
+			new ConsoleLogger(),
+			new MetricsRegistry({ bearerToken: env.LOGGING_SHIM_TOKEN })
+		);
+		const date = new Date(event.scheduledTime);
+		const isRotation = date.getUTCDate() === 1;
+
+		if (isRotation) {
+			handleRotateKey(ctx);
+		} else {
+			handleClearKey(ctx);
+		}
 	},
 };

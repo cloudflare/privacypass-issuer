@@ -1,3 +1,5 @@
+import type { R2Bucket } from '@cloudflare/workers-types/2023-07-01';
+
 export interface Bindings {
 	// variables and secrets
 	ENVIRONMENT: string;
