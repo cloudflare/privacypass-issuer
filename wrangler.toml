@@ -16,4 +16,5 @@ SENTRY_SAMPLE_RATE = "0" # Between 0-1 if you log errors on Sentry. 0 disables S
 
 [[env.production.r2_buckets]]
 bucket_name = 'pp-issuer-keys-production' # wrangler r2 bucket create pp-issuer-keys-production. Pricing and free tier described on https://developers.cloudflare.com/r2/pricing
+preview_bucket_name = 'pp-issuer-keys-production-local'
 binding = 'ISSUANCE_KEYS'

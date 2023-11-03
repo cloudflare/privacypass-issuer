@@ -15,6 +15,8 @@ export class MetricsRegistry {
 
 	requestsTotal: CounterType;
 	erroredRequestsTotal: CounterType;
+	keyRotationTotal: CounterType;
+	keyClearTotal: CounterType;
 
 	constructor(options: RegistryOptions) {
 		this.options = options;
@@ -25,6 +27,16 @@ export class MetricsRegistry {
 			'counter',
 			'errored_requests_total',
 			'Errored requests served to eyeball'
+		);
+		this.keyRotationTotal = this.registry.create(
+			'counter',
+			'key_rotation_total',
+			'Number of key rotation performed.'
+		);
+		this.keyClearTotal = this.registry.create(
+			'counter',
+			'key_clear_total',
+			'Number of key clear performed.'
 		);
 	}
 
