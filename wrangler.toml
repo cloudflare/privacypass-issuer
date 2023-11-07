@@ -10,6 +10,9 @@ command = 'npm install && npm run build'
 name = "pp-issuer-production"
 route = { pattern = "pp-issuer.example.test", custom_domain=true }
 
+[env.production.triggers]
+crons = ["0 0 * * *"]
+
 [env.production.vars]
 ENVIRONMENT = "production"
 SENTRY_SAMPLE_RATE = "0" # Between 0-1 if you log errors on Sentry. 0 disables Sentry logging. Configuration is done through Workers Secrets
