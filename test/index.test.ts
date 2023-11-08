@@ -135,14 +135,18 @@ describe('rotate and clear key', () => {
 		}
 		await workerObject.fetch(clearRequest, getEnv(), new ExecutionContextMock());
 
-		const response = await workerObject.fetch(
-			directoryRequest,
-			getEnv(),
-			new ExecutionContextMock()
-		);
+		let response = await workerObject.fetch(directoryRequest, getEnv(), new ExecutionContextMock());
 		expect(response.ok).toBe(true);
 
-		const directory: IssuerConfigurationResponse = await response.json();
+		let directory: IssuerConfigurationResponse = await response.json();
+		expect(directory['token-keys']).toHaveLength(1);
+
+		// repeated clear should keep one key
+		await workerObject.fetch(clearRequest, getEnv(), new ExecutionContextMock());
+		response = await workerObject.fetch(directoryRequest, getEnv(), new ExecutionContextMock());
+		expect(response.ok).toBe(true);
+
+		directory = await response.json();
 		expect(directory['token-keys']).toHaveLength(1);
 	});
 });
