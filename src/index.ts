@@ -153,19 +153,20 @@ const handleClearKey = async (ctx: Context, request?: Request) => {
 	const keys = await ctx.env.ISSUANCE_KEYS.list();
 
 	let latestKey: R2Object = keys.objects[0];
-	const toDelete: string[] = [];
+	const toDelete: Set<string> = new Set();
 
 	// only keep the latest key
 	for (const key of keys.objects) {
 		if (latestKey.uploaded < key.uploaded) {
-			toDelete.push(latestKey.key);
+			toDelete.add(latestKey.key);
 			latestKey = key;
-		} else if (!toDelete.includes(key.key)) {
-			toDelete.push(key.key);
+		} else if (key.uploaded !== latestKey.uploaded) {
+			toDelete.add(key.key);
 		}
 	}
-	await ctx.env.ISSUANCE_KEYS.delete(toDelete);
-	return new Response(`Keys cleared: ${toDelete.join('\n')}`, { status: 201 });
+	const toDeleteArray = [...toDelete];
+	await ctx.env.ISSUANCE_KEYS.delete(toDeleteArray);
+	return new Response(`Keys cleared: ${toDeleteArray.join('\n')}`, { status: 201 });
 };
 
 export default {
@@ -198,9 +199,9 @@ export default {
 		const isRotation = date.getUTCDate() === 1;
 
 		if (isRotation) {
-			handleRotateKey(ctx);
+			await handleRotateKey(ctx);
 		} else {
-			handleClearKey(ctx);
+			await handleClearKey(ctx);
 		}
 	},
 };
