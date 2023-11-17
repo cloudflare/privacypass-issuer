@@ -122,8 +122,9 @@ export const handleRotateKey = async (ctx: Context, request?: Request) => {
 		const publicKey = new Uint8Array(
 			(await crypto.subtle.exportKey('spki', keypair.publicKey)) as ArrayBuffer
 		);
-		publicKeyEnc = b64ToB64URL(u8ToB64(util.convertEncToRSASSAPSS(publicKey)));
-		tokenKeyID = await keyToTokenKeyID(new TextEncoder().encode(publicKeyEnc));
+		const rsaSsaPssPublicKey = util.convertEncToRSASSAPSS(publicKey);
+		publicKeyEnc = b64ToB64URL(u8ToB64(rsaSsaPssPublicKey));
+		tokenKeyID = await keyToTokenKeyID(rsaSsaPssPublicKey);
 		privateKey = (await crypto.subtle.exportKey('pkcs8', keypair.privateKey)) as ArrayBuffer;
 		// The bellow condition ensure there is no collision between truncated_token_key_id provided by the issuer
 		// This is a 1/256 with 2 keys, and 256/256 chances with 256 keys. This means an issuer cannot have more than 256 keys at the same time.
