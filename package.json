@@ -40,10 +40,9 @@
 	"dependencies": {
 		"@cloudflare/privacypass-ts": "^0.4.0",
 		"@sentry/cli": "^2.18.1",
-		"@sentry/integrations": "^7.28.1",
 		"@sentry/types": "^7.28.1",
 		"promjs": "^0.4.2",
-		"toucan-js": "^3.1.0",
+		"toucan-js": "^3.3.1",
 		"typescript": "5.0.4"
 	}
 }
