@@ -1,6 +1,5 @@
 import type { Context } from 'toucan-js/dist/types';
-import { Toucan } from 'toucan-js';
-import { RewriteFrames } from '@sentry/integrations';
+import { RewriteFrames, Toucan } from 'toucan-js';
 import { Breadcrumb } from '@sentry/types';
 
 // End toucan-js types
