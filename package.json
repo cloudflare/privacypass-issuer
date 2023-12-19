@@ -8,8 +8,8 @@
 		"build": "tsc && node scripts/cli.js build",
 		"deploy:production": "wrangler deploy --no-bundle --env production",
 		"dev": "wrangler dev --env production --test-scheduled",
-		"format": "prettier --write  '*.{json,js}' 'src/**/*.{js,ts}' 'test/**/*.{js,ts}'",
-		"lint": "eslint src && prettier --check '*.{json,js}' 'src/**/*.{js,ts}' 'test/**/*.{js,ts}'",
+		"format": "prettier --write  '*.{json,js}' 'scripts/*.{js,ts}' 'src/**/*.{js,ts}' 'test/**/*.{js,ts}'",
+		"lint": "eslint src && prettier --check '*.{json,js}' 'scripts/*.{js,ts}' 'src/**/*.{js,ts}' 'test/**/*.{js,ts}'",
 		"test": "npm run build && node --experimental-vm-modules --no-warnings node_modules/.bin/jest"
 	},
 	"eslintConfig": {
