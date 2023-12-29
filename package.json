@@ -35,7 +35,7 @@
 		"prettier": "2.8.8",
 		"sade": "1.8.1",
 		"ts-jest": "29.1.0",
-		"wrangler": "3.15.0"
+		"wrangler": "3.22.1"
 	},
 	"dependencies": {
 		"@cloudflare/privacypass-ts": "^0.4.0",
