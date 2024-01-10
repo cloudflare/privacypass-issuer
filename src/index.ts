@@ -28,6 +28,7 @@ interface StorageMetadata extends Record<string, string> {
 }
 
 export const handleTokenRequest = async (ctx: Context, request: Request) => {
+	ctx.metrics.issuanceRequestTotal.inc({ env: ctx.env.ENVIRONMENT });
 	const contentType = request.headers.get('content-type');
 	if (!contentType || contentType !== MediaType.PRIVATE_TOKEN_REQUEST) {
 		throw new HeaderNotDefinedError(`"Content-Type" must be "${MediaType.PRIVATE_TOKEN_REQUEST}"`);
@@ -71,6 +72,7 @@ export const handleTokenRequest = async (ctx: Context, request: Request) => {
 	const domain = new URL(request.url).host;
 	const issuer = new Issuer(domain, sk, pk);
 	const signedToken = await issuer.issue(tokenRequest);
+	ctx.metrics.signedTokenTotal.inc({ env: ctx.env.ENVIRONMENT });
 
 	return new Response(signedToken.serialize(), {
 		headers: { 'content-type': MediaType.PRIVATE_TOKEN_RESPONSE },
