@@ -3,7 +3,7 @@ import { handleTokenRequest, default as workerObject } from '../src/index';
 import { IssuerConfigurationResponse } from '../src/types';
 import { b64ToB64URL, u8ToB64 } from '../src/utils/base64';
 import { ExecutionContextMock, getContext, getEnv } from './mocks';
-import * as blindrsa from '@cloudflare/blindrsa-ts';
+import { RSABSSA } from '@cloudflare/blindrsa-ts';
 import {
 	MediaType,
 	PRIVATE_TOKEN_ISSUER_DIRECTORY,
@@ -20,18 +20,14 @@ const keyToTokenKeyID = async (key: Uint8Array): Promise<number> => {
 };
 
 describe('challenge handlers', () => {
-	const suite = blindrsa.SUITES.SHA384.PSS.Deterministic();
+	const suite = RSABSSA.SHA384.PSS.Deterministic();
 
 	const tokenRequestURL = `${sampleURL}/token-request`;
 	const mockPrivateKey = async (ctx: Context): Promise<CryptoKeyPair> => {
-		const keypair = await suite.generateKey(
-			{
-				publicExponent: Uint8Array.from([1, 0, 1]),
-				modulusLength: 2048,
-			},
-			true,
-			['sign', 'verify']
-		);
+		const keypair = await suite.generateKey({
+			publicExponent: Uint8Array.from([1, 0, 1]),
+			modulusLength: 2048,
+		});
 		const publicKey = new Uint8Array(
 			(await crypto.subtle.exportKey('spki', keypair.publicKey)) as ArrayBuffer
 		);
