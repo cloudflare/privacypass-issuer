@@ -1,6 +1,13 @@
 import { Context } from './context';
 import { JSONResponse } from './utils/jsonResponse';
 
+function shouldSendToSentry(error: Error): boolean {
+	if (error instanceof PageNotFoundError || error instanceof MethodNotAllowedError) {
+		return false;
+	}
+	return true;
+}
+
 export async function handleError(ctx: Context, error: Error) {
 	console.error(error.stack);
 
@@ -9,7 +16,9 @@ export async function handleError(ctx: Context, error: Error) {
 	const status = (error as HTTPError).status ?? 500;
 	const message = error.message || 'Server Error';
 	console.log(message);
-	ctx.logger.captureException(error);
+	if (shouldSendToSentry(error)) {
+		ctx.logger.captureException(error);
+	}
 	return new JSONResponse(
 		{
 			error: { reason: error.name, details: message },
