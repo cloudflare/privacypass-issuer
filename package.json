@@ -20,7 +20,7 @@
 		]
 	},
 	"devDependencies": {
-		"@cloudflare/blindrsa-ts": "^0.2.0",
+		"@cloudflare/blindrsa-ts": "0.2.0",
 		"@cloudflare/workers-types": "4.20240117.0",
 		"@types/jest": "29.5.11",
 		"dotenv": "16.4.0",
@@ -38,11 +38,11 @@
 		"wrangler": "3.24.0"
 	},
 	"dependencies": {
-		"@cloudflare/privacypass-ts": "^0.4.0",
-		"@sentry/cli": "^2.26.0",
-		"@sentry/types": "^7.95.0",
-		"promjs": "^0.4.2",
-		"toucan-js": "^3.3.1",
+		"@cloudflare/privacypass-ts": "0.4.0",
+		"@sentry/cli": "2.26.0",
+		"@sentry/types": "7.95.0",
+		"promjs": "0.4.2",
+		"toucan-js": "3.3.1",
 		"typescript": "5.3.3"
 	}
 }
