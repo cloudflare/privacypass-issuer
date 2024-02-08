@@ -7,9 +7,10 @@ import { RSABSSA } from '@cloudflare/blindrsa-ts';
 import {
 	MediaType,
 	PRIVATE_TOKEN_ISSUER_DIRECTORY,
-	TokenRequest,
+	publicVerif,
 	util,
 } from '@cloudflare/privacypass-ts';
+const { TokenRequest } = publicVerif;
 
 const sampleURL = 'http://localhost';
 

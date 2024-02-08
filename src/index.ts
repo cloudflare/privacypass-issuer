@@ -5,15 +5,15 @@ import { HeaderNotDefinedError } from './errors';
 import { IssuerConfigurationResponse, TokenType } from './types';
 import { b64ToB64URL, b64Tou8, b64URLtoB64, u8ToB64 } from './utils/base64';
 import {
-	Issuer,
 	MediaType,
 	PRIVATE_TOKEN_ISSUER_DIRECTORY,
 	TOKEN_TYPES,
-	TokenRequest,
+	publicVerif,
 	util,
 } from '@cloudflare/privacypass-ts';
 import { ConsoleLogger } from './context/logging';
 import { MetricsRegistry } from './context/metrics';
+const { BlindRSAMode, Issuer, TokenRequest } = publicVerif;
 
 const keyToTokenKeyID = async (key: Uint8Array): Promise<number> => {
 	const hash = await crypto.subtle.digest('SHA-256', key);
@@ -41,7 +41,7 @@ export const handleTokenRequest = async (ctx: Context, request: Request) => {
 		throw new Error('Invalid token type');
 	}
 
-	const key = await ctx.env.ISSUANCE_KEYS.get(tokenRequest.tokenKeyId.toString());
+	const key = await ctx.env.ISSUANCE_KEYS.get(tokenRequest.truncatedTokenKeyId.toString());
 
 	if (key === null) {
 		throw new Error('Issuer not initialised');
@@ -70,7 +70,7 @@ export const handleTokenRequest = async (ctx: Context, request: Request) => {
 		['verify']
 	);
 	const domain = new URL(request.url).host;
-	const issuer = new Issuer(domain, sk, pk);
+	const issuer = new Issuer(BlindRSAMode.PSS, domain, sk, pk, { supportsRSARAW: true });
 	const signedToken = await issuer.issue(tokenRequest);
 	ctx.metrics.signedTokenTotal.inc({ env: ctx.env.ENVIRONMENT });
 
