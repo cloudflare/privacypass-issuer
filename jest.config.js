@@ -9,6 +9,7 @@ export default {
 				'^@/(.*)$': '<rootDir>/src/$1',
 				'^(\\.{1,2}/.*)\\.js$': '$1',
 			},
+			setupFilesAfterEnv: ['./test/jest.setup-file.ts'],
 			// it was harder than expected to setup
 			// more documentation on https://miniflare.dev/testing/jest
 			testEnvironment: 'miniflare',
