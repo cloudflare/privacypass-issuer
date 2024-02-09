@@ -174,12 +174,35 @@ describe('cache directory response', () => {
 		expect(Object.entries(mockCache.cache)).toHaveLength(1);
 
 		const [cachedURL, _] = Object.entries(mockCache.cache)[0];
-		const cachedResponse = new Response('cached response');
+		const sampleEtag = '"sampleEtag"';
+		const cachedResponse = new Response('cached response', { headers: { etag: sampleEtag } });
 		mockCache.cache[cachedURL] = cachedResponse;
 
 		response = await workerObject.fetch(directoryRequest, getEnv(), new ExecutionContextMock());
 		expect(response.ok).toBe(true);
 		expect(response).toBe(cachedResponse);
+
+		const cachedDirectoryRequest = new Request(directoryURL, {
+			headers: { 'if-none-match': sampleEtag },
+		});
+		response = await workerObject.fetch(
+			cachedDirectoryRequest,
+			getEnv(),
+			new ExecutionContextMock()
+		);
+		expect(response.status).toBe(304);
+
+		const headCachedDirectoryRequest = new Request(directoryURL, {
+			method: 'HEAD',
+			headers: { 'if-none-match': sampleEtag },
+		});
+		response = await workerObject.fetch(
+			headCachedDirectoryRequest,
+			getEnv(),
+			new ExecutionContextMock()
+		);
+		expect(response.status).toBe(304);
+
 		spy.mockClear();
 	});
 });
