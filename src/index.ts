@@ -95,6 +95,7 @@ export const handleTokenDirectory = async (ctx: Context, request?: Request) => {
 	if (cachedResponse) {
 		return cachedResponse;
 	}
+	ctx.metrics.directoryCacheMissTotal.inc({ env: ctx.env.ENVIRONMENT });
 
 	const keys = await ctx.env.ISSUANCE_KEYS.list({ include: ['customMetadata'] });
 
