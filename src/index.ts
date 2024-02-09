@@ -88,6 +88,7 @@ const DIRECTORY_CACHE_REQUEST = new Request(
 	`https://${FAKE_DOMAIN_CACHE}${PRIVATE_TOKEN_ISSUER_DIRECTORY}`
 );
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export const handleTokenDirectory = async (ctx: Context, request?: Request) => {
 	const cache = await getDirectoryCache();
 	const cachedResponse = await cache.match(DIRECTORY_CACHE_REQUEST);
@@ -126,6 +127,7 @@ const clearDirectoryCache = async (): Promise<boolean> => {
 	return cache.delete(DIRECTORY_CACHE_REQUEST);
 };
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export const handleRotateKey = async (ctx: Context, request?: Request) => {
 	ctx.metrics.keyRotationTotal.inc({ env: ctx.env.ENVIRONMENT });
 
@@ -176,6 +178,7 @@ export const handleRotateKey = async (ctx: Context, request?: Request) => {
 	return new Response(`New key ${publicKeyEnc}`, { status: 201 });
 };
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const handleClearKey = async (ctx: Context, request?: Request) => {
 	ctx.metrics.keyClearTotal.inc({ env: ctx.env.ENVIRONMENT });
 	const keys = await ctx.env.ISSUANCE_KEYS.list();
