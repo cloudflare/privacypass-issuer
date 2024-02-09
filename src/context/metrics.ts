@@ -13,23 +13,32 @@ export class MetricsRegistry {
 	registry: RegistryType;
 	options: RegistryOptions;
 
-	requestsTotal: CounterType;
+	directoryCacheMissTotal: CounterType;
 	erroredRequestsTotal: CounterType;
+	issuanceRequestTotal: CounterType;
 	keyRotationTotal: CounterType;
 	keyClearTotal: CounterType;
-	issuanceRequestTotal: CounterType;
+	requestsTotal: CounterType;
 	signedTokenTotal: CounterType;
-	directoryCacheMissTotal: CounterType;
 
 	constructor(options: RegistryOptions) {
 		this.options = options;
 		this.registry = new Registry();
 
-		this.requestsTotal = this.registry.create('counter', 'requests_total', 'total requests');
+		this.directoryCacheMissTotal = this.registry.create(
+			'counter',
+			'directory_cache_miss_total',
+			'Number of requests for private token issuer directory which are not served by the cache.'
+		);
 		this.erroredRequestsTotal = this.registry.create(
 			'counter',
 			'errored_requests_total',
 			'Errored requests served to eyeball'
+		);
+		this.issuanceRequestTotal = this.registry.create(
+			'counter',
+			'issuance_request_total',
+			'Number of requests for private token issuance.'
 		);
 		this.keyRotationTotal = this.registry.create(
 			'counter',
@@ -41,20 +50,11 @@ export class MetricsRegistry {
 			'key_clear_total',
 			'Number of key clear performed.'
 		);
-		this.issuanceRequestTotal = this.registry.create(
-			'counter',
-			'issuance_request_total',
-			'Number of requests for private token issuance.'
-		);
+		this.requestsTotal = this.registry.create('counter', 'requests_total', 'total requests');
 		this.signedTokenTotal = this.registry.create(
 			'counter',
 			'signed_token_total',
 			'Number of issued signed private tokens.'
-		);
-		this.directoryCacheMissTotal = this.registry.create(
-			'counter',
-			'directory_cache_miss_total',
-			'Number of requests for private token issuer directory which are not served by the cache.'
 		);
 	}
 
