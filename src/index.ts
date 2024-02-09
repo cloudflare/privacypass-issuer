@@ -79,7 +79,22 @@ export const handleTokenRequest = async (ctx: Context, request: Request) => {
 	});
 };
 
+const getDirectoryCache = async (): Promise<Cache> => {
+	return caches.open('response/issuer-directory');
+};
+
+const FAKE_DOMAIN_CACHE = 'cache.local';
+const DIRECTORY_CACHE_REQUEST = new Request(
+	`https://${FAKE_DOMAIN_CACHE}${PRIVATE_TOKEN_ISSUER_DIRECTORY}`
+);
+
 export const handleTokenDirectory = async (ctx: Context, request?: Request) => {
+	const cache = await getDirectoryCache();
+	const cachedResponse = await cache.match(DIRECTORY_CACHE_REQUEST);
+	if (cachedResponse) {
+		return cachedResponse;
+	}
+
 	const keys = await ctx.env.ISSUANCE_KEYS.list({ include: ['customMetadata'] });
 
 	if (keys.objects.length === 0) {
@@ -95,12 +110,20 @@ export const handleTokenDirectory = async (ctx: Context, request?: Request) => {
 		})),
 	};
 
-	return new Response(JSON.stringify(directory), {
+	const response = new Response(JSON.stringify(directory), {
 		headers: {
 			'content-type': MediaType.PRIVATE_TOKEN_ISSUER_DIRECTORY,
-			'cache-control': 'public, max-age=86400',
+			'cache-control': `public, max-age=${ctx.env.DIRECTORY_CACHE_MAX_AGE_SECONDS}`,
 		},
 	});
+	ctx.waitUntil(cache.put(DIRECTORY_CACHE_REQUEST, response.clone()));
+
+	return response;
+};
+
+const clearDirectoryCache = async (): Promise<boolean> => {
+	const cache = await getDirectoryCache();
+	return cache.delete(DIRECTORY_CACHE_REQUEST);
 };
 
 export const handleRotateKey = async (ctx: Context, request?: Request) => {
@@ -148,6 +171,8 @@ export const handleRotateKey = async (ctx: Context, request?: Request) => {
 		customMetadata: metadata,
 	});
 
+	ctx.waitUntil(clearDirectoryCache());
+
 	return new Response(`New key ${publicKeyEnc}`, { status: 201 });
 };
 
@@ -169,6 +194,9 @@ const handleClearKey = async (ctx: Context, request?: Request) => {
 	}
 	const toDeleteArray = [...toDelete];
 	await ctx.env.ISSUANCE_KEYS.delete(toDeleteArray);
+
+	ctx.waitUntil(clearDirectoryCache());
+
 	return new Response(`Keys cleared: ${toDeleteArray.join('\n')}`, { status: 201 });
 };
 

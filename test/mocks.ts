@@ -3,6 +3,31 @@ import { Context, WaitUntilFunc } from '../src/context';
 import { ConsoleLogger, Logger } from '../src/context/logging';
 import { MetricsRegistry } from '../src/context/metrics';
 
+export class MockCache implements Cache {
+	public cache: Record<string, Response> = {};
+
+	async match(info: RequestInfo, options?: CacheQueryOptions): Promise<Response | undefined> {
+		if (options) {
+			throw new Error('CacheQueryOptions not supported');
+		}
+		const url = new URL(info instanceof Request ? info.url : info).href;
+		return this.cache[url];
+	}
+
+	async delete(info: RequestInfo, options?: CacheQueryOptions): Promise<boolean> {
+		if (options) {
+			throw new Error('CacheQueryOptions not supported');
+		}
+		const url = new URL(info instanceof Request ? info.url : info).href;
+		return delete this.cache[url];
+	}
+
+	async put(info: RequestInfo, response: Response): Promise<void> {
+		const url = new URL(info instanceof Request ? info.url : info).href;
+		this.cache[url] = response;
+	}
+}
+
 export class ExecutionContextMock implements ExecutionContext {
 	waitUntils: Promise<any>[] = [];
 	passThrough = false;

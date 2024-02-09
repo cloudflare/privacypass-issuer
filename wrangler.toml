@@ -14,6 +14,7 @@ route = { pattern = "pp-issuer.example.test", custom_domain=true }
 crons = ["0 0 * * *"]
 
 [env.production.vars]
+DIRECTORY_CACHE_MAX_AGE_SECONDS = "86400"
 ENVIRONMENT = "production"
 SENTRY_SAMPLE_RATE = "0" # Between 0-1 if you log errors on Sentry. 0 disables Sentry logging. Configuration is done through Workers Secrets
 

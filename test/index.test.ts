@@ -1,8 +1,10 @@
+import { jest } from '@jest/globals';
+
 import { Context } from '../src/context';
 import { handleTokenRequest, default as workerObject } from '../src/index';
 import { IssuerConfigurationResponse } from '../src/types';
 import { b64ToB64URL, u8ToB64 } from '../src/utils/base64';
-import { ExecutionContextMock, getContext, getEnv } from './mocks';
+import { ExecutionContextMock, MockCache, getContext, getEnv } from './mocks';
 import { RSABSSA } from '@cloudflare/blindrsa-ts';
 import {
 	MediaType,
@@ -145,5 +147,39 @@ describe('rotate and clear key', () => {
 
 		directory = await response.json();
 		expect(directory['token-keys']).toHaveLength(1);
+	});
+});
+
+describe('cache directory response', () => {
+	const rotateURL = `${sampleURL}/admin/rotate`;
+	const directoryURL = `${sampleURL}${PRIVATE_TOKEN_ISSUER_DIRECTORY}`;
+
+	const initializeKeys = async (numberOfKeys = 1): Promise<void> => {
+		const rotateRequest = new Request(rotateURL, { method: 'POST' });
+
+		for (let i = 0; i < numberOfKeys; i += 1) {
+			await workerObject.fetch(rotateRequest, getEnv(), new ExecutionContextMock());
+		}
+	};
+
+	it('should cache the directory response', async () => {
+		await initializeKeys();
+
+		const mockCache = new MockCache();
+		const spy = jest.spyOn(caches, 'open').mockResolvedValue(mockCache);
+		const directoryRequest = new Request(directoryURL);
+
+		let response = await workerObject.fetch(directoryRequest, getEnv(), new ExecutionContextMock());
+		expect(response.ok).toBe(true);
+		expect(Object.entries(mockCache.cache)).toHaveLength(1);
+
+		const [cachedURL, _] = Object.entries(mockCache.cache)[0];
+		const cachedResponse = new Response('cached response');
+		mockCache.cache[cachedURL] = cachedResponse;
+
+		response = await workerObject.fetch(directoryRequest, getEnv(), new ExecutionContextMock());
+		expect(response.ok).toBe(true);
+		expect(response).toBe(cachedResponse);
+		spy.mockClear();
 	});
 });
