@@ -13,6 +13,7 @@ import {
 } from '@cloudflare/privacypass-ts';
 import { ConsoleLogger } from './context/logging';
 import { MetricsRegistry } from './context/metrics';
+import { hexEncode } from './utils/hex';
 const { BlindRSAMode, Issuer, TokenRequest } = publicVerif;
 
 const keyToTokenKeyID = async (key: Uint8Array): Promise<number> => {
@@ -88,11 +89,26 @@ const DIRECTORY_CACHE_REQUEST = new Request(
 	`https://${FAKE_DOMAIN_CACHE}${PRIVATE_TOKEN_ISSUER_DIRECTORY}`
 );
 
+export const handleHeadTokenDirectory = async (ctx: Context, request: Request) => {
+	const getResponse = await handleTokenDirectory(ctx, request);
+
+	return new Response(undefined, {
+		status: getResponse.status,
+		headers: getResponse.headers,
+	});
+};
+
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-export const handleTokenDirectory = async (ctx: Context, request?: Request) => {
+export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 	const cache = await getDirectoryCache();
 	const cachedResponse = await cache.match(DIRECTORY_CACHE_REQUEST);
 	if (cachedResponse) {
+		if (request.headers.get('if-none-match') === cachedResponse.headers.get('etag')) {
+			return new Response(undefined, {
+				status: 304,
+				headers: cachedResponse.headers,
+			});
+		}
 		return cachedResponse;
 	}
 	ctx.metrics.directoryCacheMissTotal.inc({ env: ctx.env.ENVIRONMENT });
@@ -112,10 +128,19 @@ export const handleTokenDirectory = async (ctx: Context, request?: Request) => {
 		})),
 	};
 
-	const response = new Response(JSON.stringify(directory), {
+	const body = JSON.stringify(directory);
+	const digest = new Uint8Array(
+		await crypto.subtle.digest('SHA-256', new TextEncoder().encode(body))
+	);
+	const etag = `"${hexEncode(digest)}"`;
+
+	const response = new Response(body, {
 		headers: {
 			'content-type': MediaType.PRIVATE_TOKEN_ISSUER_DIRECTORY,
 			'cache-control': `public, max-age=${ctx.env.DIRECTORY_CACHE_MAX_AGE_SECONDS}`,
+			'content-length': body.length.toString(),
+			'date': new Date().toUTCString(),
+			etag,
 		},
 	});
 	ctx.waitUntil(cache.put(DIRECTORY_CACHE_REQUEST, response.clone()));
@@ -211,6 +236,7 @@ export default {
 		const router = new Router();
 
 		router
+			.head(PRIVATE_TOKEN_ISSUER_DIRECTORY, handleHeadTokenDirectory)
 			.get(PRIVATE_TOKEN_ISSUER_DIRECTORY, handleTokenDirectory)
 			.post('/token-request', handleTokenRequest)
 			.post('/admin/rotate', handleRotateKey)
