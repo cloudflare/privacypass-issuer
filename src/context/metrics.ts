@@ -19,6 +19,7 @@ export class MetricsRegistry {
 	keyClearTotal: CounterType;
 	issuanceRequestTotal: CounterType;
 	signedTokenTotal: CounterType;
+	directoryCacheMissTotal: CounterType;
 
 	constructor(options: RegistryOptions) {
 		this.options = options;
@@ -49,6 +50,11 @@ export class MetricsRegistry {
 			'counter',
 			'signed_token_total',
 			'Number of issued signed private tokens.'
+		);
+		this.directoryCacheMissTotal = this.registry.create(
+			'counter',
+			'directory_cache_miss_total',
+			'Number of requests for private token issuer directory which are not served by the cache.'
 		);
 	}
 
