@@ -98,7 +98,6 @@ export const handleHeadTokenDirectory = async (ctx: Context, request: Request) =
 	});
 };
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 	const cache = await getDirectoryCache();
 	const cachedResponse = await cache.match(DIRECTORY_CACHE_REQUEST);
@@ -153,8 +152,7 @@ const clearDirectoryCache = async (): Promise<boolean> => {
 	return cache.delete(DIRECTORY_CACHE_REQUEST);
 };
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export const handleRotateKey = async (ctx: Context, request?: Request) => {
+export const handleRotateKey = async (ctx: Context, _request?: Request) => {
 	ctx.metrics.keyRotationTotal.inc({ env: ctx.env.ENVIRONMENT });
 
 	// Generate a new type 2 Issuer key
@@ -204,8 +202,7 @@ export const handleRotateKey = async (ctx: Context, request?: Request) => {
 	return new Response(`New key ${publicKeyEnc}`, { status: 201 });
 };
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const handleClearKey = async (ctx: Context, request?: Request) => {
+const handleClearKey = async (ctx: Context, _request?: Request) => {
 	ctx.metrics.keyClearTotal.inc({ env: ctx.env.ENVIRONMENT });
 	const keys = await ctx.env.ISSUANCE_KEYS.list();
 
@@ -236,7 +233,6 @@ export default {
 		const router = new Router();
 
 		router
-			.head(PRIVATE_TOKEN_ISSUER_DIRECTORY, handleHeadTokenDirectory)
 			.get(PRIVATE_TOKEN_ISSUER_DIRECTORY, handleTokenDirectory)
 			.post('/token-request', handleTokenRequest)
 			.post('/admin/rotate', handleRotateKey)
