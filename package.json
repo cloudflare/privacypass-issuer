@@ -15,14 +15,28 @@
 	"eslintConfig": {
 		"root": true,
 		"extends": [
-			"typescript",
+			"plugin:@typescript-eslint/recommended",
 			"prettier"
-		]
+		],
+		"parser": "@typescript-eslint/parser",
+		"plugins": [
+			"@typescript-eslint"
+		],
+		"rules": {
+			"@typescript-eslint/no-unused-vars": [
+				"warn",
+				{
+					"argsIgnorePattern": "^_"
+				}
+			]
+		}
 	},
 	"devDependencies": {
 		"@cloudflare/blindrsa-ts": "0.3.2",
 		"@cloudflare/workers-types": "4.20240117.0",
 		"@types/jest": "29.5.11",
+		"@typescript-eslint/eslint-plugin": "^6.21.0",
+		"@typescript-eslint/parser": "^6.21.0",
 		"dotenv": "16.4.0",
 		"esbuild": "0.19.12",
 		"eslint": "8.56.0",
