@@ -44,6 +44,19 @@ export class Router {
 		// normalise path, so that they never end with a trailing '/'
 		path = this.normalisePath(path);
 		this.handlers[method][path] = handler;
+		if (method === HttpMethod.GET) {
+			this.handlers[HttpMethod.HEAD] ??= {};
+			this.handlers[HttpMethod.HEAD][path] = async (
+				ctx: Context,
+				request: Request
+			): Promise<Response> => {
+				const response = await handler(ctx, request);
+				if (response.ok) {
+					return new Response(null, response);
+				}
+				return response;
+			};
+		}
 		return this;
 	}
 
