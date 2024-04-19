@@ -6,7 +6,10 @@ import { MetricsRegistry } from '../src/context/metrics';
 export class MockCache implements Cache {
 	public cache: Record<string, Response> = {};
 
-	async match(info: RequestInfo, options?: CacheQueryOptions): Promise<Response | undefined> {
+	async match(
+		info: RequestInfo<unknown, CfProperties<unknown>>,
+		options?: CacheQueryOptions
+	): Promise<Response | undefined> {
 		if (options) {
 			throw new Error('CacheQueryOptions not supported');
 		}
