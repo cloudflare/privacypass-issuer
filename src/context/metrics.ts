@@ -20,6 +20,7 @@ export class MetricsRegistry {
 	keyClearTotal: CounterType;
 	requestsTotal: CounterType;
 	signedTokenTotal: CounterType;
+	r2RequestsTotal: CounterType;
 
 	constructor(options: RegistryOptions) {
 		this.options = options;
@@ -55,6 +56,11 @@ export class MetricsRegistry {
 			'counter',
 			'signed_token_total',
 			'Number of issued signed private tokens.'
+		);
+		this.r2RequestsTotal = this.registry.create(
+			'counter',
+			'r2_requests_total',
+			'Number of accesses to R2'
 		);
 	}
 

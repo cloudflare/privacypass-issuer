@@ -12,6 +12,7 @@ import {
 	publicVerif,
 	util,
 } from '@cloudflare/privacypass-ts';
+import { getDirectoryCache } from '../src/cache';
 const { TokenRequest } = publicVerif;
 
 const sampleURL = 'http://localhost';
@@ -165,9 +166,15 @@ describe('cache directory response', () => {
 	it('should cache the directory response', async () => {
 		await initializeKeys();
 
-		const mockCache = new MockCache();
-		const spy = jest.spyOn(caches, 'open').mockResolvedValue(mockCache);
+		const mockCaches: Map<string, MockCache> = new Map();
+		const spy = jest.spyOn(caches, 'open').mockImplementation(async (name: string) => {
+			if (!mockCaches.has(name)) {
+				mockCaches.set(name, new MockCache());
+			}
+			return mockCaches.get(name) as unknown as Cache;
+		});
 		const directoryRequest = new Request(directoryURL);
+		const mockCache = (await getDirectoryCache()) as unknown as MockCache;
 
 		let response = await workerObject.fetch(directoryRequest, getEnv(), new ExecutionContextMock());
 		expect(response.ok).toBe(true);

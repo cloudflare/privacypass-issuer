@@ -14,6 +14,7 @@ import {
 import { ConsoleLogger } from './context/logging';
 import { MetricsRegistry } from './context/metrics';
 import { hexEncode } from './utils/hex';
+import { DIRECTORY_CACHE_REQUEST, clearDirectoryCache, getDirectoryCache } from './cache';
 const { BlindRSAMode, Issuer, TokenRequest } = publicVerif;
 
 const keyToTokenKeyID = async (key: Uint8Array): Promise<number> => {
@@ -42,17 +43,21 @@ export const handleTokenRequest = async (ctx: Context, request: Request) => {
 		throw new Error('Invalid token type');
 	}
 
-	const key = await ctx.env.ISSUANCE_KEYS.get(tokenRequest.truncatedTokenKeyId.toString());
+	const key = await ctx.cache.ISSUANCE_KEYS.get(tokenRequest.truncatedTokenKeyId.toString());
 
 	if (key === null) {
 		throw new Error('Issuer not initialised');
 	}
 
+	const privateKey = key.data;
+	if (privateKey === undefined) {
+		throw new Error('Issuer not initialised');
+	}
 	const sk = await crypto.subtle.importKey(
 		'pkcs8',
-		await key.arrayBuffer(),
+		privateKey,
 		{
-			name: 'RSA-PSS',
+			name: ctx.isTest() ? 'RSA-PSS' : 'RSA-RAW',
 			hash: 'SHA-384',
 			length: 2048,
 		},
@@ -70,6 +75,7 @@ export const handleTokenRequest = async (ctx: Context, request: Request) => {
 		true,
 		['verify']
 	);
+
 	const domain = new URL(request.url).host;
 	const issuer = new Issuer(BlindRSAMode.PSS, domain, sk, pk, { supportsRSARAW: true });
 	const signedToken = await issuer.issue(tokenRequest);
@@ -79,15 +85,6 @@ export const handleTokenRequest = async (ctx: Context, request: Request) => {
 		headers: { 'content-type': MediaType.PRIVATE_TOKEN_RESPONSE },
 	});
 };
-
-const getDirectoryCache = async (): Promise<Cache> => {
-	return caches.open('response/issuer-directory');
-};
-
-const FAKE_DOMAIN_CACHE = 'cache.local';
-const DIRECTORY_CACHE_REQUEST = new Request(
-	`https://${FAKE_DOMAIN_CACHE}${PRIVATE_TOKEN_ISSUER_DIRECTORY}`
-);
 
 export const handleHeadTokenDirectory = async (ctx: Context, request: Request) => {
 	const getResponse = await handleTokenDirectory(ctx, request);
@@ -112,7 +109,7 @@ export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 	}
 	ctx.metrics.directoryCacheMissTotal.inc({ env: ctx.env.ENVIRONMENT });
 
-	const keys = await ctx.env.ISSUANCE_KEYS.list({ include: ['customMetadata'] });
+	const keys = await ctx.cache.ISSUANCE_KEYS.list({ include: ['customMetadata'] });
 
 	if (keys.objects.length === 0) {
 		throw new Error('Issuer not initialised');
@@ -123,7 +120,7 @@ export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 		'token-keys': keys.objects.map(key => ({
 			'token-type': TokenType.BlindRSA,
 			'token-key': (key.customMetadata as StorageMetadata).publicKey,
-			'not-before': key.uploaded.getTime(),
+			'not-before': new Date(key.uploaded).getTime(),
 		})),
 	};
 
@@ -145,11 +142,6 @@ export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 	ctx.waitUntil(cache.put(DIRECTORY_CACHE_REQUEST, response.clone()));
 
 	return response;
-};
-
-const clearDirectoryCache = async (): Promise<boolean> => {
-	const cache = await getDirectoryCache();
-	return cache.delete(DIRECTORY_CACHE_REQUEST);
 };
 
 export const handleRotateKey = async (ctx: Context, _request?: Request) => {
@@ -180,7 +172,7 @@ export const handleRotateKey = async (ctx: Context, _request?: Request) => {
 		// The bellow condition ensure there is no collision between truncated_token_key_id provided by the issuer
 		// This is a 1/256 with 2 keys, and 256/256 chances with 256 keys. This means an issuer cannot have more than 256 keys at the same time.
 		// Otherwise, this loop is going to be infinite. With 255 keys, this iteration might take a while.
-	} while ((await ctx.env.ISSUANCE_KEYS.head(tokenKeyID.toString())) !== null);
+	} while ((await ctx.cache.ISSUANCE_KEYS.head(tokenKeyID.toString())) !== null);
 
 	// check if it's the initialisation phase
 	const latest = await ctx.env.ISSUANCE_KEYS.head('latest');
