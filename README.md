@@ -1,4 +1,4 @@
-# pp-issuer
+# privacypass-issuer
 
 Privacy Pass Issuer ([Draft 16](https://www.ietf.org/archive/id/draft-ietf-privacypass-protocol-16.html)) within Cloudflare Workers. Keys are stored in [R2](https://developers.cloudflare.com/r2).
 
