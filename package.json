@@ -11,7 +11,7 @@
 		"format": "prettier --write  '*.{json,js}' 'scripts/*.{js,ts}' 'src/**/*.{js,ts}' 'test/**/*.{js,ts}'",
 		"lint": "eslint src && prettier --check '*.{json,js}' 'scripts/*.{js,ts}' 'src/**/*.{js,ts}' 'test/**/*.{js,ts}'",
 		"test": "npm run build && node --experimental-vm-modules --no-warnings node_modules/.bin/jest",
-		"test:e2e": "tsc -p ./test/e2e/tsconfig.json && node --experimental-vm-modules --no-warnings dist/index.js"
+		"test:e2e": "tsc -b ./test/e2e && node --experimental-vm-modules --no-warnings dist/index.js"
 	},
 	"eslintConfig": {
 		"root": true,
