@@ -4,6 +4,7 @@ export interface Bindings {
 	// variables and secrets
 	DIRECTORY_CACHE_MAX_AGE_SECONDS: string;
 	ENVIRONMENT: string;
+	SERVICE: string;
 	LOGGING_SHIM_TOKEN: string;
 	SENTRY_ACCESS_CLIENT_ID: string;
 	SENTRY_ACCESS_CLIENT_SECRET: string;

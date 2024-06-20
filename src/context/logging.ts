@@ -23,6 +23,7 @@ interface SentryOptions {
 
 	sampleRate?: number;
 	coloName?: string;
+	service?: string;
 }
 
 export class FlexibleLogger implements Logger {
@@ -58,12 +59,14 @@ export class SentryLogger implements Logger {
 	context: Context;
 	request: Request;
 	environment: string;
+	service: string;
 	sampleRate: number;
 
 	constructor(environment: string, options: SentryOptions) {
 		this.environment = environment;
 		this.context = options.context;
 		this.request = options.request;
+		this.service = options.service || '';
 
 		this.sentry = new Toucan({
 			dsn: options.dsn,
@@ -80,6 +83,7 @@ export class SentryLogger implements Logger {
 			},
 		});
 		this.sentry.setTag('coloName', options.coloName);
+		this.sentry.setTag('service', this.service);
 
 		// default sample rate
 		this.sampleRate = 1;
