@@ -30,7 +30,7 @@ interface StorageMetadata extends Record<string, string> {
 }
 
 export const handleTokenRequest = async (ctx: Context, request: Request) => {
-	ctx.metrics.issuanceRequestTotal.inc({ env: ctx.env.ENVIRONMENT });
+	ctx.metrics.issuanceRequestTotal.inc();
 	const contentType = request.headers.get('content-type');
 	if (!contentType || contentType !== MediaType.PRIVATE_TOKEN_REQUEST) {
 		throw new HeaderNotDefinedError(`"Content-Type" must be "${MediaType.PRIVATE_TOKEN_REQUEST}"`);
@@ -43,7 +43,8 @@ export const handleTokenRequest = async (ctx: Context, request: Request) => {
 		throw new Error('Invalid token type');
 	}
 
-	const key = await ctx.cache.ISSUANCE_KEYS.get(tokenRequest.truncatedTokenKeyId.toString());
+	const keyID = tokenRequest.truncatedTokenKeyId.toString();
+	const key = await ctx.cache.ISSUANCE_KEYS.get(keyID);
 
 	if (key === null) {
 		throw new Error('Issuer not initialised');
@@ -79,7 +80,7 @@ export const handleTokenRequest = async (ctx: Context, request: Request) => {
 	const domain = new URL(request.url).host;
 	const issuer = new Issuer(BlindRSAMode.PSS, domain, sk, pk, { supportsRSARAW: true });
 	const signedToken = await issuer.issue(tokenRequest);
-	ctx.metrics.signedTokenTotal.inc({ env: ctx.env.ENVIRONMENT });
+	ctx.metrics.signedTokenTotal.inc({ key_id: keyID });
 
 	return new Response(signedToken.serialize(), {
 		headers: { 'content-type': MediaType.PRIVATE_TOKEN_RESPONSE },
@@ -107,7 +108,7 @@ export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 		}
 		return cachedResponse;
 	}
-	ctx.metrics.directoryCacheMissTotal.inc({ env: ctx.env.ENVIRONMENT });
+	ctx.metrics.directoryCacheMissTotal.inc();
 
 	const keys = await ctx.cache.ISSUANCE_KEYS.list({ include: ['customMetadata'] });
 
@@ -145,7 +146,7 @@ export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 };
 
 export const handleRotateKey = async (ctx: Context, _request?: Request) => {
-	ctx.metrics.keyRotationTotal.inc({ env: ctx.env.ENVIRONMENT });
+	ctx.metrics.keyRotationTotal.inc();
 
 	// Generate a new type 2 Issuer key
 	let publicKeyEnc: string;
@@ -195,7 +196,7 @@ export const handleRotateKey = async (ctx: Context, _request?: Request) => {
 };
 
 const handleClearKey = async (ctx: Context, _request?: Request) => {
-	ctx.metrics.keyClearTotal.inc({ env: ctx.env.ENVIRONMENT });
+	ctx.metrics.keyClearTotal.inc();
 	const keys = await ctx.env.ISSUANCE_KEYS.list();
 
 	let latestKey: R2Object = keys.objects[0];
@@ -242,7 +243,7 @@ export default {
 			env,
 			ectx.waitUntil.bind(ectx),
 			new ConsoleLogger(),
-			new MetricsRegistry({ bearerToken: env.LOGGING_SHIM_TOKEN })
+			new MetricsRegistry(env, { bearerToken: env.LOGGING_SHIM_TOKEN })
 		);
 		const date = new Date(event.scheduledTime);
 		const isRotation = date.getUTCDate() === 1;

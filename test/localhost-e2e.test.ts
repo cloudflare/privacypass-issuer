@@ -1,41 +1,55 @@
 import { spawn } from 'node:child_process';
+import fetch from 'node-fetch';
 import { testE2E } from './e2e/issuer';
 
 const ISSUER_URL = 'localhost:8787';
 
 describe('e2e on localhost', () => {
-	let serverPID: number | undefined;
+	let serverProcess: ReturnType<typeof spawn> | undefined;
 
 	beforeAll(async () => {
 		try {
-			// start server as an independant process with npm run dev
-			const serverProcess = spawn('npm', ['run', 'dev'], { stdio: 'inherit', detached: true });
-			serverPID = serverProcess.pid;
-			console.log('Creating server with PID: ', serverPID);
+			// Start server as an independent process with npm run dev
+			serverProcess = spawn('npm', ['run', 'dev'], { stdio: 'inherit', detached: true });
+			console.log('Creating server with PID:', serverProcess.pid);
 
-			// check the server is online
+			// Check the server is online
 			const backoffInMs = 100;
-			while (true) {
+			const maxRetries = 200; // 20 seconds total with 100ms backoff
+			let retries = 0;
+			while (retries < maxRetries) {
 				try {
 					await fetch(`http://${ISSUER_URL}/`);
 					console.log('Server is up');
 					break;
 				} catch (e) {
+					retries++;
 					await new Promise(resolve => setTimeout(resolve, backoffInMs));
 				}
 			}
+			if (retries === maxRetries) {
+				throw new Error('Server did not start within the expected time');
+			}
 		} catch (err) {
-			console.log('Server failure: ', err);
+			console.log('Server failure:', err);
 		}
-	}, 10 * 1000);
+	}, 30 * 1000); // Increase timeout to 30 seconds
 
 	afterAll(() => {
-		process.kill(-serverPID!);
-		console.log('Server is down');
+		if (serverProcess && serverProcess.pid) {
+			try {
+				process.kill(-serverProcess.pid);
+				console.log('Server is down');
+			} catch (error) {
+				console.error(`Failed to kill server process: ${error}`);
+			}
+		} else {
+			console.log('Server process was not started or already terminated');
+		}
 	});
 
 	it('should issue a token that is valid', async () => {
-		// provision new keys
+		// Provision new keys
 		const response = await fetch(`http://${ISSUER_URL}/admin/rotate`, {
 			method: 'POST',
 		});

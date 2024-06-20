@@ -82,7 +82,7 @@ export class Router {
 
 	private buildContext(request: Request, env: Bindings, ectx: ExecutionContext): Context {
 		// Prometheus Registry should be unique per request
-		const metrics = new MetricsRegistry({ bearerToken: env.LOGGING_SHIM_TOKEN });
+		const metrics = new MetricsRegistry(env, { bearerToken: env.LOGGING_SHIM_TOKEN });
 
 		// Use a flexible reporter, so that it uses console.log when debugging, and Core Sentry when in production
 		let logger: Logger;
@@ -100,6 +100,7 @@ export class Router {
 				accessClientId: env.SENTRY_ACCESS_CLIENT_ID,
 				accessClientSecret: env.SENTRY_ACCESS_CLIENT_SECRET,
 				release: RELEASE,
+				service: env.SERVICE,
 				sampleRate: sentrySampleRate,
 				coloName: request?.cf?.colo as string,
 			});
@@ -120,7 +121,7 @@ export class Router {
 		ectx: ExecutionContext
 	): Promise<Response> {
 		const ctx = this.buildContext(request, env, ectx);
-		ctx.metrics.requestsTotal.inc({ env: ctx.env.ENVIRONMENT });
+		ctx.metrics.requestsTotal.inc();
 		const rawPath = new URL(request.url).pathname;
 		const path = this.normalisePath(rawPath);
 

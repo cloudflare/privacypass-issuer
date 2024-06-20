@@ -55,7 +55,7 @@ export interface MockContextOptions {
 
 export const getContext = (options: MockContextOptions): Context => {
 	const logger = options.logger ?? new ConsoleLogger();
-	const metrics = options.metrics ?? new MetricsRegistry({});
+	const metrics = options.metrics ?? new MetricsRegistry(options.env, {});
 	const waitUntilFunc = options.waitUntilFunc || options.ectx.waitUntil.bind(options.ectx);
 	return new Context(options.env, waitUntilFunc, logger, metrics);
 };
