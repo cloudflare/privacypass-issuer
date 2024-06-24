@@ -16,6 +16,7 @@ export interface Logger {
 interface SentryOptions {
 	context: Context;
 	request: Request;
+	service: string;
 	dsn: string;
 	accessClientId: string;
 	accessClientSecret: string;
@@ -23,7 +24,6 @@ interface SentryOptions {
 
 	sampleRate?: number;
 	coloName?: string;
-	service?: string;
 }
 
 export class FlexibleLogger implements Logger {
@@ -66,7 +66,7 @@ export class SentryLogger implements Logger {
 		this.environment = environment;
 		this.context = options.context;
 		this.request = options.request;
-		this.service = options.service || '';
+		this.service = options.service;
 
 		this.sentry = new Toucan({
 			dsn: options.dsn,
