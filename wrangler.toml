@@ -17,6 +17,7 @@ crons = ["0 0 * * *"]
 DIRECTORY_CACHE_MAX_AGE_SECONDS = "86400"
 ENVIRONMENT = "production"
 SENTRY_SAMPLE_RATE = "0" # Between 0-1 if you log errors on Sentry. 0 disables Sentry logging. Configuration is done through Workers Secrets
+SERVICE = "pp-issuer-production"
 
 [[env.production.r2_buckets]]
 bucket_name = 'pp-issuer-keys-production' # wrangler r2 bucket create pp-issuer-keys-production. Pricing and free tier described on https://developers.cloudflare.com/r2/pricing
