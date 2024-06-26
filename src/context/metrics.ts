@@ -3,6 +3,13 @@ import { Registry } from 'promjs/registry';
 import { Bindings } from '../bindings';
 export const METRICS_ENDPOINT = 'https://workers-logging.cfdata.org/prometheus';
 
+export const KeyError = {
+	NOT_FOUND: 'not-found',
+	INVALID_PRIVATE_KEY: 'invalid-private-key',
+	MISSING_PRIVATE_KEY: 'missing-private-key',
+	MISSING_PUBLIC_KEY: 'missing-public-key',
+};
+
 export interface RegistryOptions {
 	bearerToken?: string;
 }
@@ -25,6 +32,7 @@ export class MetricsRegistry {
 
 	directoryCacheMissTotal: CounterType;
 	erroredRequestsTotal: CounterType;
+	issuanceKeyErrorTotal: CounterType;
 	issuanceRequestTotal: CounterType;
 	keyRotationTotal: CounterType;
 	keyClearTotal: CounterType;
@@ -47,6 +55,11 @@ export class MetricsRegistry {
 			'counter',
 			'errored_requests_total',
 			'Errored requests served to eyeball'
+		);
+		this.issuanceKeyErrorTotal = this.create(
+			'counter',
+			'issuance_key_error_total',
+			'Number of key errors encountered when issuing a private token.'
 		);
 		this.issuanceRequestTotal = this.create(
 			'counter',
