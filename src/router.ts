@@ -1,3 +1,4 @@
+import { PRIVATE_TOKEN_ISSUER_DIRECTORY } from '@cloudflare/privacypass-ts';
 import { Bindings } from './bindings';
 import { Context } from './context';
 import { ConsoleLogger, FlexibleLogger, Logger } from './context/logging';
@@ -24,7 +25,18 @@ export class Router {
 
 	// Normalise path, so that they never end with a trailing '/'
 	private normalisePath(path: string): string {
-		return path.endsWith('/') ? path.slice(0, -1) : path;
+		const normalised = path.endsWith('/') ? path.slice(0, -1) : path;
+		switch (normalised) {
+			case PRIVATE_TOKEN_ISSUER_DIRECTORY:
+			case '/.well-known/token-issuer-directory':
+			case '/token-request':
+			case '/admin/rotate':
+			case '/admin/clear':
+			case '/':
+				return normalised;
+			default:
+				return '/not-found';
+		}
 	}
 
 	// Register a handler for a specific path on the router
@@ -121,9 +133,9 @@ export class Router {
 		ectx: ExecutionContext
 	): Promise<Response> {
 		const ctx = this.buildContext(request, env, ectx);
-		ctx.metrics.requestsTotal.inc();
 		const rawPath = new URL(request.url).pathname;
 		const path = this.normalisePath(rawPath);
+		ctx.metrics.requestsTotal.inc({ path });
 
 		// check if there exist a handler for the specific method and path.
 		// first filtering by method, then checking the path.
@@ -139,8 +151,9 @@ export class Router {
 			}
 			response = await handlers[path](ctx, request);
 		} catch (e: unknown) {
-			response = await handleError(ctx, e as Error);
+			response = await handleError(ctx, e as Error, { path });
 		}
+		ctx.metrics.requestsDurationMs.observe(ctx.performance.now() - ctx.startTime, { path });
 		ectx.waitUntil(this.postProcessing(ctx));
 		return response;
 	}
