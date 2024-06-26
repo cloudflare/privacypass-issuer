@@ -1,3 +1,4 @@
+import { Labels } from 'promjs';
 import { Context } from './context';
 import { JSONResponse } from './utils/jsonResponse';
 
@@ -8,10 +9,10 @@ function shouldSendToSentry(error: Error): boolean {
 	return true;
 }
 
-export async function handleError(ctx: Context, error: Error) {
+export async function handleError(ctx: Context, error: Error, labels?: Labels) {
 	console.error(error.stack);
 
-	ctx.metrics.erroredRequestsTotal.inc();
+	ctx.metrics.erroredRequestsTotal.inc(labels);
 
 	const status = (error as HTTPError).status ?? 500;
 	const message = error.message || 'Server Error';
