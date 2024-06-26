@@ -12,7 +12,7 @@ import {
 	util,
 } from '@cloudflare/privacypass-ts';
 import { ConsoleLogger } from './context/logging';
-import { MetricsRegistry } from './context/metrics';
+import { KeyError, MetricsRegistry } from './context/metrics';
 import { hexEncode } from './utils/hex';
 import { DIRECTORY_CACHE_REQUEST, clearDirectoryCache, getDirectoryCache } from './cache';
 const { BlindRSAMode, Issuer, TokenRequest } = publicVerif;
@@ -47,27 +47,36 @@ export const handleTokenRequest = async (ctx: Context, request: Request) => {
 	const key = await ctx.cache.ISSUANCE_KEYS.get(keyID);
 
 	if (key === null) {
-		throw new Error('Issuer not initialised');
+		ctx.metrics.issuanceKeyErrorTotal.inc({ key_id: keyID, type: KeyError.NOT_FOUND });
+		throw new Error('No key found for the requested key id');
 	}
 
 	const privateKey = key.data;
 	if (privateKey === undefined) {
-		throw new Error('Issuer not initialised');
+		ctx.metrics.issuanceKeyErrorTotal.inc({ key_id: keyID, type: KeyError.MISSING_PRIVATE_KEY });
+		throw new Error('No private key found for the requested key id');
 	}
-	const sk = await crypto.subtle.importKey(
-		'pkcs8',
-		privateKey,
-		{
-			name: ctx.isTest() ? 'RSA-PSS' : 'RSA-RAW',
-			hash: 'SHA-384',
-			length: 2048,
-		},
-		true,
-		['sign']
-	);
+	let sk: CryptoKey;
+	try {
+		sk = await crypto.subtle.importKey(
+			'pkcs8',
+			privateKey,
+			{
+				name: ctx.isTest() ? 'RSA-PSS' : 'RSA-RAW',
+				hash: 'SHA-384',
+				length: 2048,
+			},
+			true,
+			['sign']
+		);
+	} catch (e) {
+		ctx.metrics.issuanceKeyErrorTotal.inc({ key_id: keyID, type: KeyError.INVALID_PRIVATE_KEY });
+		throw e;
+	}
 	const pkEnc = key?.customMetadata?.publicKey;
 	if (!pkEnc) {
-		throw new Error('Issuer not initialised');
+		ctx.metrics.issuanceKeyErrorTotal.inc({ key_id: keyID, type: KeyError.MISSING_PUBLIC_KEY });
+		throw new Error('No public key found for the requested key id');
 	}
 	const pk = await crypto.subtle.importKey(
 		'spki',
