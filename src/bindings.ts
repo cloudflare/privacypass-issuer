@@ -1,4 +1,4 @@
-import type { R2Bucket } from '@cloudflare/workers-types/2023-07-01';
+import type { R2Bucket, Performance } from '@cloudflare/workers-types/2023-07-01';
 
 export interface Bindings {
 	// variables and secrets
@@ -13,4 +13,7 @@ export interface Bindings {
 
 	// R2 buckets
 	ISSUANCE_KEYS: R2Bucket;
+
+	// Performance Timer
+	PERFORMANCE: Performance | undefined;
 }

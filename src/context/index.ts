@@ -6,8 +6,10 @@ import { MetricsRegistry } from './metrics';
 export type WaitUntilFunc = (p: Promise<unknown>) => void;
 
 export class Context {
+	public startTime: number;
 	private promises: Promise<unknown>[] = [];
 	public cache: { ISSUANCE_KEYS: CachedR2Bucket };
+	public performance: Performance;
 
 	constructor(
 		public env: Bindings,
@@ -19,6 +21,9 @@ export class Context {
 		this.cache = {
 			ISSUANCE_KEYS: new CachedR2Bucket(this, env.ISSUANCE_KEYS, cache),
 		};
+
+		this.performance = env.PERFORMANCE ?? self.performance;
+		this.startTime = this.performance.now();
 	}
 
 	isTest(): boolean {
