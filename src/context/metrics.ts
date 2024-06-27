@@ -17,6 +17,7 @@ export interface RegistryOptions {
 export interface DefaultLabels {
 	env: string;
 	service: string;
+	version: string;
 }
 
 const HISTOGRAM_MS_BUCKETS = [50, 100, 200, 400, 1000, 2 * 1000, 4 * 1000];
@@ -91,9 +92,17 @@ export class MetricsRegistry {
 		this.r2RequestsTotal = this.create('counter', 'r2_requests_total', 'Number of accesses to R2');
 	}
 
+	private defaultLabels(): DefaultLabels {
+		return {
+			env: this.env.ENVIRONMENT,
+			service: this.env.SERVICE,
+			version: this.env.VERSION_METADATA.id ?? RELEASE,
+		};
+	}
+
 	private createCounter(name: string, help?: string): CounterType {
 		const counter = this.registry.create('counter', name, help);
-		const defaultLabels: DefaultLabels = { env: this.env.ENVIRONMENT, service: this.env.SERVICE };
+		const defaultLabels = this.defaultLabels();
 		return new Proxy(counter, {
 			get(target, prop, receiver) {
 				if (['collect', 'get', 'inc', 'reset'].includes(prop.toString())) {
@@ -115,7 +124,7 @@ export class MetricsRegistry {
 
 	private createHistogram(name: string, help?: string, histogramBuckets?: number[]): HistogramType {
 		const histogram = this.registry.create('histogram', name, help, histogramBuckets);
-		const defaultLabels: DefaultLabels = { env: this.env.ENVIRONMENT, service: this.env.SERVICE };
+		const defaultLabels = this.defaultLabels();
 		return new Proxy(histogram, {
 			get(target, prop, receiver) {
 				if (['collect', 'get', 'reset'].includes(prop.toString())) {

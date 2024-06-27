@@ -19,6 +19,7 @@ export default {
 			testEnvironmentOptions: {
 				bindings: {
 					LOGGING_SHIM_TOKEN: '',
+					VERSION_METADATA: '',
 				},
 				wranglerConfigEnv: 'production',
 			},
