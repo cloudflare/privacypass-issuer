@@ -23,3 +23,6 @@ SERVICE = "pp-issuer-production"
 bucket_name = 'pp-issuer-keys-production' # wrangler r2 bucket create pp-issuer-keys-production. Pricing and free tier described on https://developers.cloudflare.com/r2/pricing
 preview_bucket_name = 'pp-issuer-keys-production-local'
 binding = 'ISSUANCE_KEYS'
+
+[env.production.version_metadata]
+binding = "VERSION_METADATA"
