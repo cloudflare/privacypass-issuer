@@ -1,3 +1,6 @@
+// Copyright (c) 2023 Cloudflare, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 export const hexDecode = (s: string) => {
 	const bytes = s.match(/.{1,2}/g);
 	if (!bytes) {

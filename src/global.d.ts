@@ -1,3 +1,6 @@
+// Copyright (c) 2023 Cloudflare, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 declare global {
 	// RELEASE is statically replaced at compile time by esbuild.
 	// See scripts/build.js for more information.

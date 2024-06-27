@@ -1,3 +1,6 @@
+// Copyright (c) 2023 Cloudflare, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 import { Bindings } from '../src/bindings';
 import { Context, WaitUntilFunc } from '../src/context';
 import { ConsoleLogger, Logger } from '../src/context/logging';

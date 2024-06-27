@@ -1,3 +1,6 @@
+// Copyright (c) 2023 Cloudflare, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 import type { Context } from 'toucan-js/dist/types';
 import { RewriteFrames, Toucan } from 'toucan-js';
 import { Breadcrumb } from '@sentry/types';

@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+
+// Copyright (c) 2023 Cloudflare, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 import path from 'path';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
