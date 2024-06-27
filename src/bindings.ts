@@ -16,4 +16,7 @@ export interface Bindings {
 
 	// Performance Timer
 	PERFORMANCE: Performance | undefined;
+
+	// Worker version metadata
+	VERSION_METADATA: ScriptVersion;
 }
