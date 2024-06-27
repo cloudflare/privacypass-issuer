@@ -22,3 +22,7 @@ All endpoints are public by default. Authentication should be a second layer. In
 ## Test token issuance
 
 One can test token issuance locally using `npm run test:e2e -- <issuer-name>` target. If the issuer uses mTLS (Mutual TLS), you can use `npm run test:e2e -- --cert <path> --key <path> <issuer-name>`.
+
+## License
+
+The project is licensed under the [Apache-2.0 License](./LICENSE.txt).

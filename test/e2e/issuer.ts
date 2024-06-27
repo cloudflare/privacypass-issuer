@@ -1,3 +1,6 @@
+// Copyright (c) 2023 Cloudflare, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 import fetch from 'node-fetch'; // using node-fetch to allow usage of client side certificate with a fetch-like API. This is not a standard webcrypto behaviour, therefore using native node fetch does not work.
 import fs from 'node:fs';
 import https from 'node:https';

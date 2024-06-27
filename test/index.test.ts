@@ -1,3 +1,6 @@
+// Copyright (c) 2023 Cloudflare, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 import { jest } from '@jest/globals';
 
 import { Context } from '../src/context';

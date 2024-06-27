@@ -1,3 +1,6 @@
+// Copyright (c) 2023 Cloudflare, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 import { program } from 'commander';
 import { MTLSConfiguration, testE2E } from './issuer.js';
 

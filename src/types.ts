@@ -1,3 +1,6 @@
+// Copyright (c) 2023 Cloudflare, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 // Privacy Pass Issuance Protocol (Draft 10) - https://www.ietf.org/archive/id/draft-ietf-privacypass-protocol-10.html
 
 export type IssuerConfigurationResponse = {

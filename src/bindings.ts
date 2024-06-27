@@ -1,3 +1,6 @@
+// Copyright (c) 2023 Cloudflare, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 import type { R2Bucket, Performance } from '@cloudflare/workers-types/2023-07-01';
 
 export interface Bindings {
