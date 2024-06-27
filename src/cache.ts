@@ -1,3 +1,6 @@
+// Copyright (c) 2023 Cloudflare, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 import { R2HTTPMetadata, R2ListOptions } from '@cloudflare/workers-types/2023-07-01';
 import { Context } from './context';
 import { b64Tou8, u8ToB64 } from './utils/base64';

@@ -1,3 +1,6 @@
+// Copyright (c) 2023 Cloudflare, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 import { Bindings } from './bindings';
 import { Context } from './context';
 import { Router } from './router';

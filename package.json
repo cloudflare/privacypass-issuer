@@ -3,6 +3,7 @@
 	"version": "0.1.0",
 	"type": "module",
 	"main": "dist/worker.mjs",
+	"license": "Apache-2.0",
 	"private": true,
 	"scripts": {
 		"build": "tsc && node scripts/cli.js build",

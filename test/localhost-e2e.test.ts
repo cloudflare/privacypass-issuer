@@ -1,3 +1,6 @@
+// Copyright (c) 2023 Cloudflare, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 import { spawn } from 'node:child_process';
 import fetch from 'node-fetch';
 import { testE2E } from './e2e/issuer';
