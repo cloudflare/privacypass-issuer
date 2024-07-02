@@ -95,7 +95,7 @@ export class MetricsRegistry {
 		this.r2RequestsDurationMs = this.create(
 			'histogram',
 			'r2_requests_duration_ms',
-			'R2 request duration',
+			'R2 requests duration',
 			HISTOGRAM_MS_BUCKETS
 		);
 	}
