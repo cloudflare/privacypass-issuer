@@ -27,7 +27,6 @@ const keyToTokenKeyID = async (key: Uint8Array): Promise<number> => {
 };
 
 interface StorageMetadata extends Record<string, string> {
-	version: string;
 	publicKey: string;
 	tokenKeyID: string;
 }
@@ -193,13 +192,7 @@ export const handleRotateKey = async (ctx: Context, _request?: Request) => {
 		// Otherwise, this loop is going to be infinite. With 255 keys, this iteration might take a while.
 	} while ((await ctx.cache.ISSUANCE_KEYS.head(tokenKeyID.toString())) !== null);
 
-	// check if it's the initialisation phase
-	const latest = await ctx.env.ISSUANCE_KEYS.head('latest');
-	const version = latest?.customMetadata?.version ?? '0';
-	const next = Number.parseInt(version) + 1;
-
 	const metadata: StorageMetadata = {
-		version: next.toString(),
 		publicKey: publicKeyEnc,
 		tokenKeyID: tokenKeyID.toString(),
 	};
