@@ -82,8 +82,8 @@ export class MetricsRegistry {
 		);
 		this.requestsDurationMs = this.create(
 			'histogram',
-			'request_time_total',
-			'Request time',
+			'request_duration_ms',
+			'Request duration',
 			HISTOGRAM_MS_BUCKETS
 		);
 		this.requestsTotal = this.create('counter', 'requests_total', 'total requests');
