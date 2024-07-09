@@ -3,6 +3,7 @@
 
 import { Bindings } from '../bindings';
 import { APICache, CachedR2Bucket, InMemoryCache, CascadingCache } from '../cache';
+import { asyncRetries, DEFAULT_RETRIES } from '../utils/promises';
 import { Logger } from './logging';
 import { MetricsRegistry } from './metrics';
 
@@ -11,7 +12,7 @@ export type WaitUntilFunc = (p: Promise<unknown>) => void;
 export class Context {
 	public startTime: number;
 	private promises: Promise<unknown>[] = [];
-	public cache: { ISSUANCE_KEYS: CachedR2Bucket };
+	public bucket: { ISSUANCE_KEYS: CachedR2Bucket };
 	public performance: Performance;
 
 	constructor(
@@ -21,8 +22,25 @@ export class Context {
 		public metrics: MetricsRegistry
 	) {
 		const cache = new CascadingCache(new InMemoryCache(), new APICache('r2/issuance_keys'));
-		this.cache = {
-			ISSUANCE_KEYS: new CachedR2Bucket(this, env.ISSUANCE_KEYS, cache),
+		const cachedR2Bucket = new CachedR2Bucket(this, env.ISSUANCE_KEYS, cache);
+		// eslint-disable-next-line @typescript-eslint/no-this-alias
+		const ctx = this;
+
+		const cachedR2BucketWithRetries = new Proxy(cachedR2Bucket, {
+			get: (target, prop, receiver) => {
+				const method = Reflect.get(target, prop, receiver);
+				if (typeof method !== 'function') {
+					return method;
+				}
+
+				const operation = typeof prop === 'string' ? prop : prop.toString();
+				const asyncMethod = asyncRetries(ctx, method.bind(target), DEFAULT_RETRIES, { operation });
+				return asyncMethod;
+			},
+		});
+
+		this.bucket = {
+			ISSUANCE_KEYS: cachedR2BucketWithRetries,
 		};
 
 		this.performance = env.PERFORMANCE ?? self.performance;
