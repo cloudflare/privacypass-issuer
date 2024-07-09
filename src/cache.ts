@@ -168,11 +168,17 @@ export class CachedR2Objects {
 }
 
 const R2Method = {
+	DELETE: 'delete',
 	GET: 'get',
 	HEAD: 'head',
 	LIST: 'list',
+	PUT: 'put',
 };
 const R2MethodSet = new Set(Object.values(R2Method));
+
+export interface CachedR2BucketOptions {
+	shouldUseCache?: boolean;
+}
 
 export class CachedR2Bucket {
 	private bucket: R2Bucket;
@@ -201,9 +207,17 @@ export class CachedR2Bucket {
 		});
 	}
 
+	private shouldUseCache(options?: CachedR2BucketOptions): boolean {
+		return options?.shouldUseCache ?? true;
+	}
+
 	// WARNING: key should be lowered than 1024 bytes
 	// See https://developers.cloudflare.com/r2/reference/limits/
-	head(key: string): Promise<CachedR2Object | null> {
+	head(key: string, options?: CachedR2BucketOptions): Promise<CachedR2Object | null> {
+		if (!this.shouldUseCache(options)) {
+			return this.bucket.head(key);
+		}
+
 		const cacheKey = `head/${key}`;
 		return this.cache.read(cacheKey, async () => {
 			const object = await this.bucket.head(key);
@@ -218,7 +232,11 @@ export class CachedR2Bucket {
 		});
 	}
 
-	list(options?: R2ListOptions | undefined): Promise<CachedR2Objects> {
+	list(options?: R2ListOptions & CachedR2BucketOptions): Promise<CachedR2Objects> {
+		if (!this.shouldUseCache(options)) {
+			return this.bucket.list(options);
+		}
+
 		const cacheKey = `list/${JSON.stringify(options)}`;
 		return this.cache.read(cacheKey, async () => {
 			const objects = await this.bucket.list(options);
@@ -232,7 +250,14 @@ export class CachedR2Bucket {
 
 	// WARNING: key should be lowered than 1024 bytes
 	// See https://developers.cloudflare.com/r2/reference/limits/
-	async get(key: string, options?: R2GetOptions): Promise<CachedR2Object | null> {
+	async get(
+		key: string,
+		options?: R2GetOptions & CachedR2BucketOptions
+	): Promise<CachedR2Object | null> {
+		if (!this.shouldUseCache(options)) {
+			return this.bucket.get(key, options);
+		}
+
 		const cacheKey = `get/${key}`;
 		return this.cache.read(cacheKey, async () => {
 			const object = await this.bucket.get(key, options);
@@ -245,5 +270,17 @@ export class CachedR2Bucket {
 				expiration: new Date(Date.now() + this.ttl_in_ms),
 			};
 		});
+	}
+
+	put(
+		...args: Parameters<typeof R2Bucket.prototype.put>
+	): ReturnType<typeof R2Bucket.prototype.put> {
+		return this.bucket.put(...args);
+	}
+
+	delete(
+		...args: Parameters<typeof R2Bucket.prototype.delete>
+	): ReturnType<typeof R2Bucket.prototype.delete> {
+		return this.bucket.delete(...args);
 	}
 }

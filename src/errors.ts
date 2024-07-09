@@ -95,3 +95,14 @@ export class NotImplementedError extends HTTPError {
 		this.code = NotImplementedError.CODE;
 	}
 }
+
+export class UnreachableError extends HTTPError {
+	static CODE = 'ERROR_UNREACHABLE';
+	code: string;
+
+	constructor(message = 'Unreachable') {
+		super(message, 500);
+		this.name = 'Unreachable';
+		this.code = UnreachableError.CODE;
+	}
+}
