@@ -34,6 +34,7 @@ export class MetricsRegistry {
 	options: RegistryOptions;
 	registry: RegistryType;
 
+	asyncRetriesTotal: CounterType;
 	directoryCacheMissTotal: CounterType;
 	erroredRequestsTotal: CounterType;
 	issuanceKeyErrorTotal: CounterType;
@@ -42,14 +43,19 @@ export class MetricsRegistry {
 	keyClearTotal: CounterType;
 	requestsDurationMs: HistogramType;
 	requestsTotal: CounterType;
-	signedTokenTotal: CounterType;
 	r2RequestsDurationMs: HistogramType;
+	signedTokenTotal: CounterType;
 
 	constructor(env: Bindings, options: RegistryOptions) {
 		this.env = env;
 		this.options = options;
 		this.registry = new Registry();
 
+		this.asyncRetriesTotal = this.create(
+			'counter',
+			'async_retries_total',
+			'Number of async retries performed.'
+		);
 		this.directoryCacheMissTotal = this.create(
 			'counter',
 			'directory_cache_miss_total',
@@ -87,16 +93,16 @@ export class MetricsRegistry {
 			HISTOGRAM_MS_BUCKETS
 		);
 		this.requestsTotal = this.create('counter', 'requests_total', 'total requests');
-		this.signedTokenTotal = this.create(
-			'counter',
-			'signed_token_total',
-			'Number of issued signed private tokens.'
-		);
 		this.r2RequestsDurationMs = this.create(
 			'histogram',
 			'r2_requests_duration_ms',
 			'R2 requests duration',
 			HISTOGRAM_MS_BUCKETS
+		);
+		this.signedTokenTotal = this.create(
+			'counter',
+			'signed_token_total',
+			'Number of issued signed private tokens.'
 		);
 	}
 

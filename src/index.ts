@@ -46,7 +46,7 @@ export const handleTokenRequest = async (ctx: Context, request: Request) => {
 	}
 
 	const keyID = tokenRequest.truncatedTokenKeyId.toString();
-	const key = await ctx.cache.ISSUANCE_KEYS.get(keyID);
+	const key = await ctx.bucket.ISSUANCE_KEYS.get(keyID);
 
 	if (key === null) {
 		ctx.metrics.issuanceKeyErrorTotal.inc({ key_id: keyID, type: KeyError.NOT_FOUND });
@@ -127,7 +127,7 @@ export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 	}
 	ctx.metrics.directoryCacheMissTotal.inc();
 
-	const keys = await ctx.cache.ISSUANCE_KEYS.list({ include: ['customMetadata'] });
+	const keys = await ctx.bucket.ISSUANCE_KEYS.list({ include: ['customMetadata'] });
 
 	if (keys.objects.length === 0) {
 		throw new Error('Issuer not initialised');
@@ -190,14 +190,14 @@ export const handleRotateKey = async (ctx: Context, _request?: Request) => {
 		// The bellow condition ensure there is no collision between truncated_token_key_id provided by the issuer
 		// This is a 1/256 with 2 keys, and 256/256 chances with 256 keys. This means an issuer cannot have more than 256 keys at the same time.
 		// Otherwise, this loop is going to be infinite. With 255 keys, this iteration might take a while.
-	} while ((await ctx.cache.ISSUANCE_KEYS.head(tokenKeyID.toString())) !== null);
+	} while ((await ctx.bucket.ISSUANCE_KEYS.head(tokenKeyID.toString())) !== null);
 
 	const metadata: StorageMetadata = {
 		publicKey: publicKeyEnc,
 		tokenKeyID: tokenKeyID.toString(),
 	};
 
-	await ctx.env.ISSUANCE_KEYS.put(tokenKeyID.toString(), privateKey, {
+	await ctx.bucket.ISSUANCE_KEYS.put(tokenKeyID.toString(), privateKey, {
 		customMetadata: metadata,
 	});
 
@@ -208,9 +208,9 @@ export const handleRotateKey = async (ctx: Context, _request?: Request) => {
 
 const handleClearKey = async (ctx: Context, _request?: Request) => {
 	ctx.metrics.keyClearTotal.inc();
-	const keys = await ctx.env.ISSUANCE_KEYS.list();
+	const keys = await ctx.bucket.ISSUANCE_KEYS.list({ shouldUseCache: false });
 
-	let latestKey: R2Object = keys.objects[0];
+	let latestKey = keys.objects[0];
 	const toDelete: Set<string> = new Set();
 
 	// only keep the latest key
@@ -223,7 +223,7 @@ const handleClearKey = async (ctx: Context, _request?: Request) => {
 		}
 	}
 	const toDeleteArray = [...toDelete];
-	await ctx.env.ISSUANCE_KEYS.delete(toDeleteArray);
+	await ctx.bucket.ISSUANCE_KEYS.delete(toDeleteArray);
 
 	ctx.waitUntil(clearDirectoryCache());
 
