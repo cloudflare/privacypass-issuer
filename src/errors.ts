@@ -12,6 +12,10 @@ function shouldSendToSentry(error: Error): boolean {
 	return true;
 }
 
+export function isHTTPError(error: unknown): error is HTTPError {
+	return error instanceof HTTPError;
+}
+
 export async function handleError(ctx: Context, error: Error, labels?: Labels) {
 	console.error(error.stack);
 
