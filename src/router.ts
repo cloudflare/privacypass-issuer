@@ -10,8 +10,7 @@ import {
 	MethodNotAllowedError,
 	PageNotFoundError,
 	handleError,
-	isHTTPError,
-	ErrorWithStatus,
+	getStatusFromError,
 } from './errors';
 
 const HttpMethod = {
@@ -160,18 +159,8 @@ export class Router {
 			}
 			response = await handlers[path](ctx, request);
 		} catch (e: unknown) {
-			let status = 500; // Default status if not HTTPError
-
-			if (isHTTPError(e)) {
-				status = e.status;
-				response = await handleError(ctx, e, { path, status: e.status });
-			} else if (typeof e === 'object' && e !== null && 'status' in e) {
-				const errorWithStatus = e as ErrorWithStatus;
-				status = errorWithStatus.status;
-				response = await handleError(ctx, errorWithStatus as unknown as Error, { path, status });
-			} else {
-				response = await handleError(ctx, e as Error, { path });
-			}
+			const status = getStatusFromError(e);
+			response = await handleError(ctx, e as Error, { path, status });
 		}
 		ctx.metrics.requestsDurationMs.observe(ctx.performance.now() - ctx.startTime, { path });
 		ectx.waitUntil(this.postProcessing(ctx));

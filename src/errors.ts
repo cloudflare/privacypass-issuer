@@ -12,8 +12,21 @@ function shouldSendToSentry(error: Error): boolean {
 	return true;
 }
 
-export function isHTTPError(error: unknown): error is HTTPError {
+function isHTTPError(error: unknown): error is HTTPError {
 	return error instanceof HTTPError;
+}
+
+export function getStatusFromError(e: unknown): number {
+	if (isHTTPError(e)) {
+		return e.status;
+	}
+	if (typeof e === 'object' && e !== null && 'status' in e) {
+		const status = (e as { status: unknown }).status;
+		if (typeof status === 'number') {
+			return status;
+		}
+	}
+	return 500;
 }
 
 export async function handleError(ctx: Context, error: Error, labels?: Labels) {
@@ -110,8 +123,3 @@ export class UnreachableError extends HTTPError {
 		this.code = UnreachableError.CODE;
 	}
 }
-
-export type ErrorWithStatus = {
-	status: number;
-	[key: string]: unknown; // Optional, to allow other properties
-};
