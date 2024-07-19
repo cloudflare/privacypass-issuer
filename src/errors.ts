@@ -110,3 +110,8 @@ export class UnreachableError extends HTTPError {
 		this.code = UnreachableError.CODE;
 	}
 }
+
+export type ErrorWithStatus = {
+	status: number;
+	[key: string]: unknown; // Optional, to allow other properties
+};

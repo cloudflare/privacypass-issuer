@@ -6,7 +6,13 @@ import { Bindings } from './bindings';
 import { Context } from './context';
 import { ConsoleLogger, FlexibleLogger, Logger } from './context/logging';
 import { MetricsRegistry } from './context/metrics';
-import { MethodNotAllowedError, PageNotFoundError, handleError, isHTTPError } from './errors';
+import {
+	MethodNotAllowedError,
+	PageNotFoundError,
+	handleError,
+	isHTTPError,
+	ErrorWithStatus,
+} from './errors';
 
 const HttpMethod = {
 	DELETE: 'DELETE',
@@ -154,10 +160,18 @@ export class Router {
 			}
 			response = await handlers[path](ctx, request);
 		} catch (e: unknown) {
+			let status = 500; // Default status if not HTTPError
+
 			if (isHTTPError(e)) {
-				response = await handleError(ctx, e as Error, { path, status: e.status });
+				status = e.status;
+				response = await handleError(ctx, e, { path, status: e.status });
+			} else if (typeof e === 'object' && e !== null && 'status' in e) {
+				const errorWithStatus = e as ErrorWithStatus;
+				status = errorWithStatus.status;
+				response = await handleError(ctx, errorWithStatus as unknown as Error, { path, status });
+			} else {
+				response = await handleError(ctx, e as Error, { path });
 			}
-			response = await handleError(ctx, e as Error, { path });
 		}
 		ctx.metrics.requestsDurationMs.observe(ctx.performance.now() - ctx.startTime, { path });
 		ectx.waitUntil(this.postProcessing(ctx));
