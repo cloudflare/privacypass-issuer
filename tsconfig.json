@@ -8,7 +8,8 @@
 		"preserveConstEnums": true,
 		"moduleResolution": "node",
 		"sourceMap": true,
-		"types": ["@cloudflare/workers-types"]
+		"types": ["@cloudflare/workers-types"],
+		"esModuleInterop": true
 	},
 	"include": ["src"],
 	"exclude": ["node_modules", "dist", "test"]
