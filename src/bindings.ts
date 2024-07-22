@@ -22,4 +22,7 @@ export interface Bindings {
 
 	// Worker version metadata
 	VERSION_METADATA: ScriptVersion;
+
+	// Key rotation schedule
+	ROTATION_CRON_STRING?: string;
 }
