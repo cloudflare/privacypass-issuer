@@ -6,7 +6,11 @@ import { Context } from './context';
 import { JSONResponse } from './utils/jsonResponse';
 
 function shouldSendToSentry(error: Error): boolean {
-	if (error instanceof PageNotFoundError || error instanceof MethodNotAllowedError) {
+	if (
+		error instanceof PageNotFoundError ||
+		error instanceof MethodNotAllowedError ||
+		error instanceof HeaderNotDefinedError
+	) {
 		return false;
 	}
 	return true;
