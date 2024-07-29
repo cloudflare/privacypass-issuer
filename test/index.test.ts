@@ -16,6 +16,7 @@ import {
 	util,
 } from '@cloudflare/privacypass-ts';
 import { getDirectoryCache } from '../src/cache';
+import { shouldRotateKey } from '../src/utils/keyRotation';
 const { TokenRequest } = publicVerif;
 
 const sampleURL = 'http://localhost';
@@ -214,5 +215,55 @@ describe('cache directory response', () => {
 		expect(response.status).toBe(304);
 
 		spy.mockClear();
+	});
+});
+
+describe('key rotation', () => {
+	it('should rotate key at every minute', async () => {
+		const ctx = getContext({ env: getEnv(), ectx: new ExecutionContextMock() });
+		ctx.env.ROTATION_CRON_STRING = '* * * * *'; // Every minute
+
+		const date = new Date('2023-08-01T00:01:00Z');
+		expect(shouldRotateKey(date, ctx.env)).toBe(true);
+	});
+
+	it('should rotate key at midnight on the first day of every month', async () => {
+		const ctx = getContext({ env: getEnv(), ectx: new ExecutionContextMock() });
+		ctx.env.ROTATION_CRON_STRING = '0 0 1 * *'; // At 00:00 on day-of-month 1
+
+		const date = new Date('2023-09-01T00:00:00Z');
+		expect(shouldRotateKey(date, ctx.env)).toBe(true);
+	});
+
+	it('should rotate key at 12:30 PM every day', async () => {
+		const ctx = getContext({ env: getEnv(), ectx: new ExecutionContextMock() });
+		ctx.env.ROTATION_CRON_STRING = '30 12 * * *'; // At 12:30 every day
+
+		const date = new Date('2023-08-01T12:30:00Z');
+		expect(shouldRotateKey(date, ctx.env)).toBe(true);
+	});
+
+	it('should not rotate key at noon on a non-rotation day', async () => {
+		const ctx = getContext({ env: getEnv(), ectx: new ExecutionContextMock() });
+		ctx.env.ROTATION_CRON_STRING = '0 0 1 * *'; // At 00:00 on day-of-month 1
+
+		const date = new Date('2023-08-02T12:00:00Z'); // 2nd August is not the 1st
+		expect(shouldRotateKey(date, ctx.env)).toBe(false);
+	});
+
+	it('should rotate key at 11:59 PM on the last day of the month', async () => {
+		const ctx = getContext({ env: getEnv(), ectx: new ExecutionContextMock() });
+		ctx.env.ROTATION_CRON_STRING = '59 23 * * *'; // At 23:59 on the last day of the month
+
+		const date = new Date('2023-08-31T23:59:00Z'); // 31st August 2023 is the last day of the month
+		expect(shouldRotateKey(date, ctx.env)).toBe(true);
+	});
+
+	it('should handle rotation with millisecond precision', async () => {
+		const ctx = getContext({ env: getEnv(), ectx: new ExecutionContextMock() });
+		ctx.env.ROTATION_CRON_STRING = '* * * * *';
+
+		const date = new Date('2023-08-01T00:01:00.010Z');
+		expect(shouldRotateKey(date, ctx.env)).toBe(true);
 	});
 });

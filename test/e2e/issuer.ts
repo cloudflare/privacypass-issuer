@@ -70,6 +70,23 @@ async function getIssuerConfig(name: string, mTLS?: MTLSConfiguration) {
 	};
 }
 
+export async function rotateKey(issuerName: string, mTLS: MTLSConfiguration) {
+	const protocol = getProtocol(issuerName);
+	const proxyFetch = mTLS ? await fetchWithMTLS(mTLS) : fetch;
+	const rotateURL = `${protocol}//${issuerName}/admin/rotate`;
+
+	const response = await proxyFetch(rotateURL, {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json',
+		},
+	});
+
+	if (!response.ok) {
+		throw new Error(`Key rotation request failed: ${response.status} ${response.statusText}`);
+	}
+}
+
 async function importPublicKey(spki: Uint8Array) {
 	return crypto.subtle.importKey('spki', spki, { name: 'RSA-PSS', hash: 'SHA-384' }, true, [
 		'verify',
