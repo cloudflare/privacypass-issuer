@@ -1,6 +1,6 @@
 main = "./dist/worker.mjs"
 compatibility_date = "2023-04-01"
-workers_dev = false # Enable it for development purposes, and if you are want a domain ending with .workers.dev
+workers_dev = false                 # Enable it for development purposes, and if you are want a domain ending with .workers.dev
 account_id = "your-account-id-here" # Log in dash.cloudflare.com, select an account, go to Workers, and copy Account ID
 
 [build]
@@ -8,7 +8,7 @@ command = 'npm install && npm run build'
 
 [env.production]
 name = "pp-issuer-production"
-route = { pattern = "pp-issuer.example.test", custom_domain=true }
+route = { pattern = "pp-issuer.example.test", custom_domain = true }
 
 [env.production.triggers]
 crons = ["0 0 * * *"]
@@ -16,12 +16,12 @@ crons = ["0 0 * * *"]
 [env.production.vars]
 DIRECTORY_CACHE_MAX_AGE_SECONDS = "86400"
 ENVIRONMENT = "production"
-SENTRY_SAMPLE_RATE = "0" # Between 0-1 if you log errors on Sentry. 0 disables Sentry logging. Configuration is done through Workers Secrets
+SENTRY_SAMPLE_RATE = "0"                  # Between 0-1 if you log errors on Sentry. 0 disables Sentry logging. Configuration is done through Workers Secrets
 SERVICE = "pp-issuer-production"
 ROTATION_CRON_STRING = '30 12 * * *'
 
 [[env.production.r2_buckets]]
-bucket_name = 'pp-issuer-keys-production' # wrangler r2 bucket create pp-issuer-keys-production. Pricing and free tier described on https://developers.cloudflare.com/r2/pricing
+bucket_name = 'pp-issuer-keys-production'               # wrangler r2 bucket create pp-issuer-keys-production. Pricing and free tier described on https://developers.cloudflare.com/r2/pricing
 preview_bucket_name = 'pp-issuer-keys-production-local'
 binding = 'ISSUANCE_KEYS'
 

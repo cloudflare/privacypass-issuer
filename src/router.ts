@@ -28,6 +28,7 @@ export class Router {
 
 	// Normalise path, so that they never end with a trailing '/'
 	private normalisePath(path: string): string {
+		console.log("inside normalisePath")
 		const normalised = path.endsWith('/') ? path.slice(0, -1) : path;
 		switch (normalised) {
 			case PRIVATE_TOKEN_ISSUER_DIRECTORY:
@@ -96,6 +97,7 @@ export class Router {
 	}
 
 	private buildContext(request: Request, env: Bindings, ectx: ExecutionContext): Context {
+		console.log("inside buildContext")
 		// Prometheus Registry should be unique per request
 		const metrics = new MetricsRegistry(env, { bearerToken: env.LOGGING_SHIM_TOKEN });
 

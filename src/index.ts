@@ -43,6 +43,8 @@ export const handleTokenRequest = async (ctx: Context, request: Request) => {
 	const buffer = await request.arrayBuffer();
 	const tokenRequest = TokenRequest.deserialize(new Uint8Array(buffer));
 
+	tokenRequest.tokenType = TOKEN_TYPES.VOPRF.value;
+
 	if (tokenRequest.tokenType !== TOKEN_TYPES.BLIND_RSA.value) {
 		throw new Error('Invalid token type');
 	}
@@ -128,13 +130,10 @@ export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 		return cachedResponse;
 	}
 	ctx.metrics.directoryCacheMissTotal.inc();
-
 	const keys = await ctx.bucket.ISSUANCE_KEYS.list({ include: ['customMetadata'] });
-
 	if (keys.objects.length === 0) {
 		throw new Error('Issuer not initialised');
 	}
-
 	const directory: IssuerConfigurationResponse = {
 		'issuer-request-uri': '/token-request',
 		'token-keys': keys.objects.map(key => ({
@@ -143,13 +142,11 @@ export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 			'not-before': new Date(key.uploaded).getTime(),
 		})),
 	};
-
 	const body = JSON.stringify(directory);
 	const digest = new Uint8Array(
 		await crypto.subtle.digest('SHA-256', new TextEncoder().encode(body))
 	);
 	const etag = `"${hexEncode(digest)}"`;
-
 	const response = new Response(body, {
 		headers: {
 			'content-type': MediaType.PRIVATE_TOKEN_ISSUER_DIRECTORY,
@@ -166,6 +163,7 @@ export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 
 export const handleRotateKey = async (ctx: Context, _request?: Request) => {
 	ctx.metrics.keyRotationTotal.inc();
+	console.log("inside handleRotateKey")
 
 	// Generate a new type 2 Issuer key
 	let publicKeyEnc: string;
@@ -236,8 +234,10 @@ export default {
 	async fetch(request: Request, env: Bindings, ctx: ExecutionContext) {
 		// router defines all API endpoints
 		// this ease testing, as test can be performed on specific handler methods, not necessardily e2e
+		console.log("inside fetch")
 		const router = new Router();
 
+		console.log("inside fetch")
 		router
 			.get(PRIVATE_TOKEN_ISSUER_DIRECTORY, handleTokenDirectory)
 			.post('/token-request', handleTokenRequest)
