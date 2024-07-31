@@ -4,7 +4,7 @@
 import { Bindings } from './bindings';
 import { Context } from './context';
 import { Router } from './router';
-import { HeaderNotDefinedError, InternalCacheError } from './errors';
+import { HeaderNotDefinedError, InternalCacheError, InvalidTokenTypeError } from './errors';
 import { IssuerConfigurationResponse, TokenType } from './types';
 import { b64ToB64URL, b64Tou8, b64URLtoB64, u8ToB64 } from './utils/base64';
 import {
@@ -43,8 +43,9 @@ export const handleTokenRequest = async (ctx: Context, request: Request) => {
 	const buffer = await request.arrayBuffer();
 	const tokenRequest = TokenRequest.deserialize(new Uint8Array(buffer));
 
+	tokenRequest.tokenType = TOKEN_TYPES.VOPRF.value;
 	if (tokenRequest.tokenType !== TOKEN_TYPES.BLIND_RSA.value) {
-		throw new Error('Invalid token type');
+		throw new InvalidTokenTypeError();
 	}
 
 	const keyID = tokenRequest.truncatedTokenKeyId.toString();

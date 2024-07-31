@@ -110,3 +110,14 @@ export class UnreachableError extends HTTPError {
 		this.code = UnreachableError.CODE;
 	}
 }
+
+export class InvalidTokenTypeError extends HTTPError {
+	static CODE = 'ERROR_INVALID_TOKEN_TYPE';
+	code: string;
+
+	constructor(message = 'Invalid token type') {
+		super(message, 400);
+		this.name = 'InvalidTokenTypeError';
+		this.code = InvalidTokenTypeError.CODE;
+	}
+}
