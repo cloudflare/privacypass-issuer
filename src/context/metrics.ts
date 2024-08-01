@@ -186,6 +186,10 @@ export class MetricsRegistry {
 	 * This function is a no-op in test and wrangler environements
 	 */
 	async publish(): Promise<void> {
+		console.log("publishing metrics")
+		const metricsData = await this.registry.metrics();
+		console.log("Metrics Data:", metricsData);
+
 		await fetch(METRICS_ENDPOINT, {
 			method: 'POST',
 			headers: {

@@ -79,6 +79,7 @@ export const handleTokenRequest = async (ctx: Context, request: Request) => {
 	}
 	const pkEnc = key?.customMetadata?.publicKey;
 	if (!pkEnc) {
+		console.log(`I'm here, the key id is: ${keyID} and the type is ${KeyError.MISSING_PUBLIC_KEY}`)
 		ctx.metrics.issuanceKeyErrorTotal.inc({ key_id: keyID, type: KeyError.MISSING_PUBLIC_KEY });
 		throw new Error('No public key found for the requested key id');
 	}
