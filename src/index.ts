@@ -20,8 +20,6 @@ import { hexEncode } from './utils/hex';
 import { DIRECTORY_CACHE_REQUEST, clearDirectoryCache, getDirectoryCache } from './cache';
 const { BlindRSAMode, Issuer, TokenRequest } = publicVerif;
 
-import { shouldRotateKey } from './utils/keyRotation';
-
 const keyToTokenKeyID = async (key: Uint8Array): Promise<number> => {
 	const hash = await crypto.subtle.digest('SHA-256', key);
 	const u8 = new Uint8Array(hash);
@@ -258,12 +256,6 @@ export default {
 			new ConsoleLogger(),
 			new MetricsRegistry(env, { bearerToken: env.LOGGING_SHIM_TOKEN })
 		);
-		const date = new Date(event.scheduledTime);
-
-		if (shouldRotateKey(date, env)) {
-			await handleRotateKey(ctx);
-		} else {
-			await handleClearKey(ctx);
-		}
+		await handleRotateKey(ctx);
 	},
 };
