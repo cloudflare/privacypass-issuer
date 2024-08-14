@@ -240,6 +240,7 @@ export default {
 
 		router
 			.get(PRIVATE_TOKEN_ISSUER_DIRECTORY, handleTokenDirectory)
+			.get('/.well-known/token-issuer-directory', handleTokenDirectory)
 			.post('/token-request', handleTokenRequest)
 			.post('/admin/rotate', handleRotateKey)
 			.post('/admin/clear', handleClearKey);
