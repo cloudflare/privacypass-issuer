@@ -224,7 +224,13 @@ const handleClearKey = async (ctx: Context, _request?: Request) => {
 			toDelete.add(key.key);
 		}
 	}
+
+	if (toDelete.size === 0) {
+		return new Response('No keys to clear', { status: 201 });
+	}
+
 	const toDeleteArray = [...toDelete];
+
 	await ctx.bucket.ISSUANCE_KEYS.delete(toDeleteArray);
 
 	ctx.waitUntil(clearDirectoryCache());
