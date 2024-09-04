@@ -43,6 +43,8 @@ interface StorageMetadata extends Record<string, string> {
 	tokenKeyID: string;
 }
 
+const KEY_LIFESPAN = 48 * 60 * 60 * 1000;
+
 export const handleTokenRequest = async (ctx: Context, request: Request) => {
 	ctx.metrics.issuanceRequestTotal.inc({ version: ctx.env.VERSION_METADATA.id ?? RELEASE });
 	const contentType = request.headers.get('content-type');
@@ -255,6 +257,8 @@ export const handleRotateKey = async (ctx: Context, _request?: Request) => {
 export const handleClearKey = async (ctx: Context, _request?: Request) => {
 	ctx.metrics.keyClearTotal.inc();
 
+	const now = Date.now();
+
 	const keys = await ctx.bucket.ISSUANCE_KEYS.list({ shouldUseCache: false });
 
 	if (keys.objects.length === 0) {
@@ -268,21 +272,27 @@ export const handleClearKey = async (ctx: Context, _request?: Request) => {
 
 	const toDelete: Set<string> = new Set();
 
-	for (let i = 0; i < keys.objects.length; i++) {
-		const key = keys.objects[i];
-		const keyUploadTime = new Date(key.uploaded);
+	for (const key of keys.objects) {
+		const keyUploadTime = new Date(key.uploaded).getTime();
+		const keyExpirationTime = keyUploadTime + KEY_LIFESPAN;
 
-		const isFreshest = i < freshestKeyCount;
-
-		if (isFreshest) {
-			continue;
-		}
-
-		const shouldDelete = shouldClearKey(keyUploadTime, lifespanInMs);
-
-		if (shouldDelete) {
+		if (keyExpirationTime < now) {
 			toDelete.add(key.key);
 		}
+
+		if (latestKey.uploaded < key.uploaded) {
+			latestKey = key;
+		}
+	}
+
+	// Ensure the latest key is never deleted
+	if (toDelete.has(latestKey.key)) {
+		toDelete.delete(latestKey.key);
+	}
+
+	if (toDelete.size === 0) {
+		console.log('No keys to clear.');
+		return new Response('No keys to clear', { status: 201 });
 	}
 
 	const toDeleteArray = [...toDelete];
@@ -294,7 +304,7 @@ export const handleClearKey = async (ctx: Context, _request?: Request) => {
 	}
 
 	await ctx.bucket.ISSUANCE_KEYS.delete(toDeleteArray);
-	ctx.waitUntil(clearDirectoryCache(ctx));
+	ctx.waitUntil(clearDirectoryCache());
 
 	return new Response(`Keys cleared: ${toDeleteArray.join('\n')}`, { status: 201 });
 };

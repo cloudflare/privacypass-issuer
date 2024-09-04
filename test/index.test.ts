@@ -139,19 +139,18 @@ describe('rotate and clear key', () => {
 	});
 
 	it('should not clear any keys before TTL expires', async () => {
+	it('should not clear any keys before TTL expires', async () => {
 		const rotateRequest = new Request(rotateURL, { method: 'POST' });
 		const clearRequest = new Request(clearURL, { method: 'POST' });
 		const directoryRequest = new Request(directoryURL);
 
 		const NUMBER_OF_KEYS_GENERATED = 3;
-		const env = getEnv();
-		env.MINIMUM_FRESHEST_KEYS = NUMBER_OF_KEYS_GENERATED.toFixed();
 
 		for (let i = 0; i < NUMBER_OF_KEYS_GENERATED; i += 1) {
 			await workerObject.fetch(rotateRequest, env, new ExecutionContextMock());
 		}
 
-		await workerObject.fetch(clearRequest, env, new ExecutionContextMock());
+		await workerObject.fetch(clearRequest, getEnv(), new ExecutionContextMock());
 
 		let response = await workerObject.fetch(directoryRequest, env, new ExecutionContextMock());
 		expect(response.ok).toBe(true);
@@ -161,11 +160,17 @@ describe('rotate and clear key', () => {
 		// All keys should still be present since the TTL has not expired
 		expect(directory['token-keys']).toHaveLength(NUMBER_OF_KEYS_GENERATED);
 
-		await workerObject.fetch(clearRequest, env, new ExecutionContextMock());
-		response = await workerObject.fetch(directoryRequest, env, new ExecutionContextMock());
+		// All keys should still be present since the TTL has not expired
+		expect(directory['token-keys']).toHaveLength(NUMBER_OF_KEYS_GENERATED);
+
+		await workerObject.fetch(clearRequest, getEnv(), new ExecutionContextMock());
+		response = await workerObject.fetch(directoryRequest, getEnv(), new ExecutionContextMock());
 		expect(response.ok).toBe(true);
 
 		directory = await response.json();
+
+		// Verify all keys are still present
+		expect(directory['token-keys']).toHaveLength(NUMBER_OF_KEYS_GENERATED);
 
 		// Verify all keys are still present
 		expect(directory['token-keys']).toHaveLength(NUMBER_OF_KEYS_GENERATED);
