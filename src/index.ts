@@ -33,6 +33,8 @@ interface StorageMetadata extends Record<string, string> {
 	tokenKeyID: string;
 }
 
+const KEY_LIFESPAN = 48 * 60 * 60 * 1000;
+
 export const handleTokenRequest = async (ctx: Context, request: Request) => {
 	ctx.metrics.issuanceRequestTotal.inc();
 	const contentType = request.headers.get('content-type');
@@ -210,19 +212,30 @@ export const handleRotateKey = async (ctx: Context, _request?: Request) => {
 
 const handleClearKey = async (ctx: Context, _request?: Request) => {
 	ctx.metrics.keyClearTotal.inc();
+
+	const now = Date.now();
+
 	const keys = await ctx.bucket.ISSUANCE_KEYS.list({ shouldUseCache: false });
 
 	let latestKey = keys.objects[0];
 	const toDelete: Set<string> = new Set();
 
-	// only keep the latest key
 	for (const key of keys.objects) {
-		if (latestKey.uploaded < key.uploaded) {
-			toDelete.add(latestKey.key);
-			latestKey = key;
-		} else if (key.uploaded !== latestKey.uploaded) {
+		const keyUploadTime = new Date(key.uploaded).getTime();
+		const keyExpirationTime = keyUploadTime + KEY_LIFESPAN;
+
+		if (keyExpirationTime < now) {
 			toDelete.add(key.key);
 		}
+
+		if (latestKey.uploaded < key.uploaded) {
+			latestKey = key;
+		}
+	}
+
+	// Ensure the latest key is never deleted
+	if (toDelete.has(latestKey.key)) {
+		toDelete.delete(latestKey.key);
 	}
 
 	if (toDelete.size === 0) {
@@ -232,7 +245,6 @@ const handleClearKey = async (ctx: Context, _request?: Request) => {
 	const toDeleteArray = [...toDelete];
 
 	await ctx.bucket.ISSUANCE_KEYS.delete(toDeleteArray);
-
 	ctx.waitUntil(clearDirectoryCache());
 
 	return new Response(`Keys cleared: ${toDeleteArray.join('\n')}`, { status: 201 });
