@@ -43,7 +43,8 @@ interface StorageMetadata extends Record<string, string> {
 	tokenKeyID: string;
 }
 
-const KEY_LIFESPAN = 48 * 60 * 60 * 1000;
+// const KEY_LIFESPAN = 48 * 60 * 60 * 1000;
+const KEY_LIFESPAN = 2 * 60 * 1000;
 
 export const handleTokenRequest = async (ctx: Context, request: Request) => {
 	ctx.metrics.issuanceRequestTotal.inc({ version: ctx.env.VERSION_METADATA.id ?? RELEASE });
@@ -208,6 +209,7 @@ export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 	return response;
 };
 
+
 export const handleRotateKey = async (ctx: Context, _request?: Request) => {
 	ctx.metrics.keyRotationTotal.inc();
 
@@ -254,60 +256,81 @@ export const handleRotateKey = async (ctx: Context, _request?: Request) => {
 	return new Response(`New key ${publicKeyEnc}`, { status: 201 });
 };
 
-export const handleClearKey = async (ctx: Context, _request?: Request) => {
+const handleClearKey = async (ctx: Context, _request?: Request) => {
+	// Start of the function
+	console.log("Starting handleClearKey function...");
+
 	ctx.metrics.keyClearTotal.inc();
+	console.log("Incremented keyClearTotal metric.");
 
 	const now = Date.now();
+	console.log(`Current timestamp (now): ${now}`);
 
+	// List the keys in the bucket
 	const keys = await ctx.bucket.ISSUANCE_KEYS.list({ shouldUseCache: false });
+	console.log(`Keys fetched from bucket: ${keys.objects.length} keys found.`);
 
 	if (keys.objects.length === 0) {
+		console.log("No keys found in the bucket.");
 		return new Response('No keys to clear', { status: 201 });
 	}
 
-	const lifespanInMs = Number.parseInt(ctx.env.KEY_LIFESPAN_IN_MS);
-	const freshestKeyCount = Number.parseInt(ctx.env.MINIMUM_FRESHEST_KEYS);
-
-	keys.objects.sort((a, b) => new Date(b.uploaded).getTime() - new Date(a.uploaded).getTime());
+	let latestKey = keys.objects[0];
+	console.log(`Initially setting the latest key to: ${latestKey.key} (uploaded at: ${latestKey.uploaded})`);
 
 	const toDelete: Set<string> = new Set();
 
+	// Iterate over the keys to check expiration
 	for (const key of keys.objects) {
 		const keyUploadTime = new Date(key.uploaded).getTime();
 		const keyExpirationTime = keyUploadTime + KEY_LIFESPAN;
 
+		console.log(`Checking key: ${key.key} (uploaded at: ${key.uploaded})`);
+		console.log(`Key upload time: ${keyUploadTime}, expiration time: ${keyExpirationTime}`);
+
 		if (keyExpirationTime < now) {
+			console.log(`Key ${key.key} has expired and will be marked for deletion.`);
 			toDelete.add(key.key);
+		} else {
+			console.log(`Key ${key.key} has not expired.`);
 		}
 
 		if (latestKey.uploaded < key.uploaded) {
+			console.log(`Found a newer key: ${key.key} (uploaded at: ${key.uploaded}), updating latest key.`);
 			latestKey = key;
 		}
 	}
 
+	// Log the latest key
+	console.log(`Latest key is: ${latestKey.key} (uploaded at: ${latestKey.uploaded})`);
+
 	// Ensure the latest key is never deleted
 	if (toDelete.has(latestKey.key)) {
+		console.log(`Latest key ${latestKey.key} is in the deletion list, removing it from the list.`);
 		toDelete.delete(latestKey.key);
 	}
 
+	// If no keys to delete, log and exit
 	if (toDelete.size === 0) {
-		console.log('No keys to clear.');
+		console.log("No keys to delete.");
 		return new Response('No keys to clear', { status: 201 });
 	}
 
 	const toDeleteArray = [...toDelete];
+	console.log(`Keys to be deleted: ${toDeleteArray.join(', ')}`);
 
-	if (toDeleteArray.length > 0) {
-		console.log(`\nKeys cleared: ${toDeleteArray.join('\n')}`);
-	} else {
-		console.log('\nNo keys were cleared.');
-	}
-
+	// Delete the keys
 	await ctx.bucket.ISSUANCE_KEYS.delete(toDeleteArray);
-	ctx.waitUntil(clearDirectoryCache());
+	console.log("Keys successfully deleted.");
 
+	// Clear the directory cache
+	ctx.waitUntil(clearDirectoryCache());
+	console.log("clearDirectoryCache triggered.");
+
+	// Return response
 	return new Response(`Keys cleared: ${toDeleteArray.join('\n')}`, { status: 201 });
 };
+
 
 export default {
 	async fetch(request: Request, env: Bindings, ctx: ExecutionContext) {
