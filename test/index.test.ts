@@ -128,30 +128,35 @@ describe('rotate and clear key', () => {
 		expect(directory['token-keys']).toHaveLength(NUMBER_OF_KEYS_GENERATED);
 	});
 
-	it('should clear keys and keep only one', async () => {
+	it('should not clear any keys before TTL expires', async () => {
 		const rotateRequest = new Request(rotateURL, { method: 'POST' });
 		const clearRequest = new Request(clearURL, { method: 'POST' });
 		const directoryRequest = new Request(directoryURL);
 
 		const NUMBER_OF_KEYS_GENERATED = 3;
+
 		for (let i = 0; i < NUMBER_OF_KEYS_GENERATED; i += 1) {
 			await workerObject.fetch(rotateRequest, getEnv(), new ExecutionContextMock());
 		}
+
 		await workerObject.fetch(clearRequest, getEnv(), new ExecutionContextMock());
 
 		let response = await workerObject.fetch(directoryRequest, getEnv(), new ExecutionContextMock());
 		expect(response.ok).toBe(true);
 
 		let directory: IssuerConfigurationResponse = await response.json();
-		expect(directory['token-keys']).toHaveLength(1);
 
-		// repeated clear should keep one key
+		// All keys should still be present since the TTL has not expired
+		expect(directory['token-keys']).toHaveLength(NUMBER_OF_KEYS_GENERATED);
+
 		await workerObject.fetch(clearRequest, getEnv(), new ExecutionContextMock());
 		response = await workerObject.fetch(directoryRequest, getEnv(), new ExecutionContextMock());
 		expect(response.ok).toBe(true);
 
 		directory = await response.json();
-		expect(directory['token-keys']).toHaveLength(1);
+
+		// Verify all keys are still present
+		expect(directory['token-keys']).toHaveLength(NUMBER_OF_KEYS_GENERATED);
 	});
 });
 
