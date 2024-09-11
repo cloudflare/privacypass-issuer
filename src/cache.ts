@@ -47,6 +47,9 @@ const serialize = <T>(value: T): string => {
 
 const deserialize = <T>(value: string): T => {
 	return JSON.parse(value, (_key, value) => {
+		if (!value) {
+			return value;
+		}
 		if (value.startsWith && value.startsWith('u8-')) {
 			return b64Tou8(value.slice('u8-'.length));
 		}
@@ -66,7 +69,7 @@ export class InMemoryCache implements ReadableCache {
 
 	async read<T>(key: string, setValFn: (key: string) => Promise<CacheElement<T>>): Promise<T> {
 		const cachedValue = this.store.get(key);
-		if (cachedValue !== undefined) {
+		if (cachedValue) {
 			if (cachedValue.expiration > new Date()) {
 				return deserialize(cachedValue.value);
 			}
@@ -86,7 +89,7 @@ export class APICache implements ReadableCache {
 		const cache = await caches.open(this.cacheKey);
 		const request = new Request(`https://${FAKE_DOMAIN_CACHE}/${key}`);
 		const cachedValue = await cache.match(request);
-		if (cachedValue !== undefined) {
+		if (cachedValue) {
 			const val = await cachedValue.text();
 			return deserialize(val);
 		}
