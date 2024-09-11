@@ -121,3 +121,14 @@ export class InvalidTokenTypeError extends HTTPError {
 		this.code = InvalidTokenTypeError.CODE;
 	}
 }
+
+export class BadTokenKeyRequestedError extends HTTPError {
+	static CODE = 'ERROR_BAD_TOKEN_KEY_REQUESTED';
+	code: string;
+
+	constructor(message = 'Bad token key requested') {
+		super(message, 400);
+		this.name = 'BadTokenKeyRequestedError';
+		this.code = BadTokenKeyRequestedError.CODE;
+	}
+}
