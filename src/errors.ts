@@ -9,7 +9,8 @@ function shouldSendToSentry(error: Error): boolean {
 	if (
 		error instanceof PageNotFoundError ||
 		error instanceof MethodNotAllowedError ||
-		error instanceof HeaderNotDefinedError
+		error instanceof HeaderNotDefinedError ||
+		error instanceof BadTokenKeyRequestedError
 	) {
 		return false;
 	}
