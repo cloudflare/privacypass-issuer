@@ -4,7 +4,12 @@
 import { Bindings } from './bindings';
 import { Context } from './context';
 import { Router } from './router';
-import { HeaderNotDefinedError, InternalCacheError, InvalidTokenTypeError } from './errors';
+import {
+	BadTokenKeyRequestedError,
+	HeaderNotDefinedError,
+	InternalCacheError,
+	InvalidTokenTypeError,
+} from './errors';
 import { IssuerConfigurationResponse, TokenType } from './types';
 import { b64ToB64URL, b64Tou8, b64URLtoB64, u8ToB64 } from './utils/base64';
 import {
@@ -54,7 +59,7 @@ export const handleTokenRequest = async (ctx: Context, request: Request) => {
 
 	if (key === null) {
 		ctx.metrics.issuanceKeyErrorTotal.inc({ key_id: keyID, type: KeyError.NOT_FOUND });
-		throw new Error('No key found for the requested key id');
+		throw new BadTokenKeyRequestedError('No key found for the requested key id');
 	}
 
 	const privateKey = key.data;
