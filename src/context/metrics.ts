@@ -20,7 +20,6 @@ export interface RegistryOptions {
 export interface DefaultLabels {
 	env: string;
 	service: string;
-	version: string;
 }
 
 const HISTOGRAM_MS_BUCKETS = [50, 100, 200, 400, 1000, 2 * 1000, 4 * 1000];
@@ -110,7 +109,6 @@ export class MetricsRegistry {
 		return {
 			env: this.env.ENVIRONMENT,
 			service: this.env.SERVICE,
-			version: this.env.VERSION_METADATA.id ?? RELEASE,
 		};
 	}
 
