@@ -20,7 +20,10 @@ function shouldSendToSentry(error: Error): boolean {
 export async function handleError(ctx: Context, error: Error, labels?: Labels) {
 	console.error(error.stack);
 
-	ctx.metrics.erroredRequestsTotal.inc(labels);
+	ctx.metrics.erroredRequestsTotal.inc({
+		...labels,
+		version: ctx.env.VERSION_METADATA.id ?? RELEASE,
+	});
 
 	const status = (error as HTTPError).status ?? 500;
 	const message = error.message || 'Server Error';
