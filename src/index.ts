@@ -41,7 +41,7 @@ interface StorageMetadata extends Record<string, string> {
 const KEY_LIFESPAN = 48 * 60 * 60 * 1000;
 
 export const handleTokenRequest = async (ctx: Context, request: Request) => {
-	ctx.metrics.issuanceRequestTotal.inc();
+	ctx.metrics.issuanceRequestTotal.inc({ version: ctx.env.VERSION_METADATA.id ?? RELEASE });
 	const contentType = request.headers.get('content-type');
 	if (!contentType || contentType !== MediaType.PRIVATE_TOKEN_REQUEST) {
 		throw new HeaderNotDefinedError(`"Content-Type" must be "${MediaType.PRIVATE_TOKEN_REQUEST}"`);
