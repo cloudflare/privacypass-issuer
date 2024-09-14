@@ -10,6 +10,7 @@ import { b64ToB64URL, u8ToB64 } from '../src/utils/base64';
 import { ExecutionContextMock, MockCache, getContext, getEnv } from './mocks';
 import { RSABSSA } from '@cloudflare/blindrsa-ts';
 import {
+	IssuerConfig,
 	MediaType,
 	PRIVATE_TOKEN_ISSUER_DIRECTORY,
 	publicVerif,
@@ -160,7 +161,7 @@ describe('rotate and clear key', () => {
 	});
 });
 
-describe('cache directory response', () => {
+describe('directory', () => {
 	const rotateURL = `${sampleURL}/admin/rotate`;
 	const directoryURL = `${sampleURL}${PRIVATE_TOKEN_ISSUER_DIRECTORY}`;
 
@@ -172,9 +173,11 @@ describe('cache directory response', () => {
 		}
 	};
 
-	it('should cache the directory response', async () => {
+	beforeEach(async () => {
 		await initializeKeys();
+	});
 
+	it('response should be cached', async () => {
 		const mockCaches: Map<string, MockCache> = new Map();
 		const spy = jest.spyOn(caches, 'open').mockImplementation(async (name: string) => {
 			if (!mockCaches.has(name)) {
@@ -220,6 +223,32 @@ describe('cache directory response', () => {
 		expect(response.status).toBe(304);
 
 		spy.mockClear();
+	});
+
+	it('not-before should be the unix time number of seconds as a 64-bit integer', async () => {
+		const directoryRequest = new Request(directoryURL);
+
+		const response = await workerObject.fetch(
+			directoryRequest,
+			getEnv(),
+			new ExecutionContextMock()
+		);
+		expect(response.ok).toBe(true);
+
+		const directory = (await response.json()) as IssuerConfig;
+
+		for (const tokenKey of directory['token-keys']) {
+			if (!tokenKey['not-before']) {
+				continue;
+			}
+			// check if it's an integer
+			expect(tokenKey['not-before'] - Math.trunc(tokenKey['not-before'])).toBe(0);
+
+			// checks the date matches
+			const date = new Date(tokenKey['not-before'] * 1000);
+			expect(date.getMilliseconds()).toBe(0);
+			expect(date.getDay()).toBe(new Date().getDay()); // while this could fail if the test is run when day is passing, this is unlikely and a good enough proxy
+		}
 	});
 });
 
