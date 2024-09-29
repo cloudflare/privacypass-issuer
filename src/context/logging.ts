@@ -4,6 +4,8 @@
 import type { Context } from 'toucan-js/dist/types';
 import { RewriteFrames, Toucan } from 'toucan-js';
 import { Breadcrumb } from '@sentry/types';
+import { Bindings } from '../bindings';
+export const KIBANA_ENDPOINT = 'https://workers-logging.cfdata.org/log';
 
 // End toucan-js types
 
@@ -148,18 +150,83 @@ export class ConsoleLogger implements Logger {
 		// eslint-disable-next-line no-console
 		console.error(err.stack);
 	}
-	setTag(key: string, value: string): void {}
-	setSampleRate(sampleRate: number): void {}
-	addBreadcrumb(breadcrumb: Breadcrumb): void {}
+	setTag(key: string, value: string): void { }
+	setSampleRate(sampleRate: number): void { }
+	addBreadcrumb(breadcrumb: Breadcrumb): void { }
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	info(category: string, message: string, data?: { [key: string]: any }): void {}
+	info(category: string, message: string, data?: { [key: string]: any }): void { }
 }
 
 export class VoidLogger implements Logger {
-	setTag(key: string, value: string): void {}
-	setSampleRate(sampleRate: number): void {}
-	addBreadcrumb(breadcrumb: Breadcrumb): void {}
-	captureException(e: Error): void {}
-	info(category: string, message: string, data?: { [key: string]: any }): void {}
+	setTag(key: string, value: string): void { }
+	setSampleRate(sampleRate: number): void { }
+	addBreadcrumb(breadcrumb: Breadcrumb): void { }
+	captureException(e: Error): void { }
+	info(category: string, message: string, data?: { [key: string]: any }): void { }
+}
+
+export interface ESLoggerOptions {
+	bearerToken?: string;
+}
+
+export class ESLogger {
+	env: Bindings;
+	options: ESLoggerOptions;
+	private logs: any[] = [];
+
+
+	constructor(env: Bindings, options: ESLoggerOptions) {
+		this.env = env;
+		this.options = options;
+	}
+
+	log(level: string = 'INFO', ...msg: any[]): void {
+		const defaultTags = {
+			env: this.env.ENVIRONMENT,
+			service: this.env.SERVICE,
+		};
+
+		let message = '';
+		if (msg.length === 1 && typeof msg[0] === 'object') {
+			message = JSON.stringify(msg[0]);
+			this.logs.push({ message, level, ...defaultTags });
+		} else {
+			message = msg.map(o => (typeof o === 'object' ? JSON.stringify(o) : String(o))).join(' ');
+			this.logs.push({ message, level, ...defaultTags });
+		}
+	}
+
+
+	async publish(): Promise<void> {
+		const body = JSON.stringify({
+			logs: this.logs.map(log => ({
+				message: log.message || 'No message provided',
+				level: log.level || 'INFO',
+				env: log.env,
+				service: log.service,
+			}))
+		});
+
+		if (this.options.bearerToken) {
+			try {
+				await fetch(KIBANA_ENDPOINT, {
+					method: 'POST',
+					headers: {
+						Authorization: `Bearer ${this.options.bearerToken}`,
+						'Content-Type': 'application/json',
+					},
+					body,
+				});
+			} catch (error) {
+				console.error('Failed to send logs:', error);
+			}
+		}
+		this.reset();
+	}
+
+
+	reset(): void {
+		this.logs.length = 0;
+	}
 }
 /* eslint-enable */

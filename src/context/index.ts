@@ -4,7 +4,7 @@
 import { Bindings } from '../bindings';
 import { APICache, CachedR2Bucket, InMemoryCache, CascadingCache } from '../cache';
 import { asyncRetries, DEFAULT_RETRIES } from '../utils/promises';
-import { Logger } from './logging';
+import { ESLogger, Logger } from './logging';
 import { MetricsRegistry } from './metrics';
 
 export type WaitUntilFunc = (p: Promise<unknown>) => void;
@@ -19,7 +19,8 @@ export class Context {
 		public env: Bindings,
 		private _waitUntil: WaitUntilFunc,
 		public logger: Logger,
-		public metrics: MetricsRegistry
+		public metrics: MetricsRegistry,
+		public elasticLogger: ESLogger,
 	) {
 		const cache = new CascadingCache(new InMemoryCache(), new APICache('r2/issuance_keys'));
 		const cachedR2Bucket = new CachedR2Bucket(this, env.ISSUANCE_KEYS, cache);

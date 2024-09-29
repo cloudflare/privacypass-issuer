@@ -4,7 +4,7 @@
 import { PRIVATE_TOKEN_ISSUER_DIRECTORY } from '@cloudflare/privacypass-ts';
 import { Bindings } from './bindings';
 import { Context } from './context';
-import { ConsoleLogger, FlexibleLogger, Logger } from './context/logging';
+import { ConsoleLogger, ESLogger, FlexibleLogger, Logger } from './context/logging';
 import { MetricsRegistry } from './context/metrics';
 import { MethodNotAllowedError, PageNotFoundError, handleError, HTTPError } from './errors';
 
@@ -98,6 +98,7 @@ export class Router {
 	private buildContext(request: Request, env: Bindings, ectx: ExecutionContext): Context {
 		// Prometheus Registry should be unique per request
 		const metrics = new MetricsRegistry(env, { bearerToken: env.LOGGING_SHIM_TOKEN });
+		const elasticLogger = new ESLogger(env, { bearerToken: env.LOGGING_SHIM_TOKEN });
 
 		// Use a flexible reporter, so that it uses console.log when debugging, and Core Sentry when in production
 		let logger: Logger;
@@ -120,13 +121,14 @@ export class Router {
 				coloName: request?.cf?.colo as string,
 			});
 		}
-		return new Context(env, ectx.waitUntil.bind(ectx), logger, metrics);
+		return new Context(env, ectx.waitUntil.bind(ectx), logger, metrics, elasticLogger);
 	}
 
 	private async postProcessing(ctx: Context) {
 		// wait for async tasks to complete before reporting metrics
 		await ctx.waitForPromises();
 		await ctx.metrics.publish();
+		await ctx.elasticLogger.publish();
 	}
 
 	// match exact path, and returns a response using the appropriate path handler

@@ -19,7 +19,7 @@ import {
 	publicVerif,
 	util,
 } from '@cloudflare/privacypass-ts';
-import { ConsoleLogger } from './context/logging';
+import { ConsoleLogger, ESLogger } from './context/logging';
 import { KeyError, MetricsRegistry } from './context/metrics';
 import { hexEncode } from './utils/hex';
 import { DIRECTORY_CACHE_REQUEST, clearDirectoryCache, getDirectoryCache } from './cache';
@@ -101,6 +101,8 @@ export const handleTokenRequest = async (ctx: Context, request: Request) => {
 	const issuer = new Issuer(BlindRSAMode.PSS, domain, sk, pk, { supportsRSARAW: true });
 	const signedToken = await issuer.issue(tokenRequest);
 	ctx.metrics.signedTokenTotal.inc({ key_id: keyID });
+
+	ctx.elasticLogger.log('INFO', { event: 'Token issued successfully', keyId: keyID });
 
 	return new Response(signedToken.serialize(), {
 		headers: { 'content-type': MediaType.PRIVATE_TOKEN_RESPONSE },
@@ -210,6 +212,8 @@ export const handleRotateKey = async (ctx: Context, _request?: Request) => {
 		customMetadata: metadata,
 	});
 
+	ctx.elasticLogger.log('INFO', { event: 'Key rotated', keyId: tokenKeyID });
+
 	ctx.waitUntil(clearDirectoryCache());
 
 	return new Response(`New key ${publicKeyEnc}`, { status: 201 });
@@ -280,7 +284,8 @@ export default {
 			env,
 			ectx.waitUntil.bind(ectx),
 			new ConsoleLogger(),
-			new MetricsRegistry(env, { bearerToken: env.LOGGING_SHIM_TOKEN })
+			new MetricsRegistry(env, { bearerToken: env.LOGGING_SHIM_TOKEN }),
+			new ESLogger(env, { bearerToken: env.LOGGING_SHIM_TOKEN })
 		);
 		const date = new Date(event.scheduledTime);
 
