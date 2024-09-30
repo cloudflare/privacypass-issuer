@@ -83,7 +83,7 @@ export class InMemoryCache implements ReadableCache {
 }
 
 export class APICache implements ReadableCache {
-	constructor(private cacheKey: string) {}
+	constructor(private cacheKey: string) { }
 
 	async read<T>(key: string, setValFn: (key: string) => Promise<CacheElement<T>>): Promise<T> {
 		const cache = await caches.open(this.cacheKey);

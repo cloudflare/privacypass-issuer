@@ -253,9 +253,14 @@ const handleClearKey = async (ctx: Context, _request?: Request) => {
 
 	const toDeleteArray = [...toDelete];
 
-	await ctx.bucket.ISSUANCE_KEYS.delete(toDeleteArray);
-	ctx.waitUntil(clearDirectoryCache());
+	try {
+		await ctx.bucket.ISSUANCE_KEYS.delete(toDeleteArray);
+		ctx.elasticLogger.log('INFO', { event: 'Keys to Clear', count: toDeleteArray.length, keys: toDeleteArray });
+	} catch (e) {
+		throw new Error('Failed to delete keys');
+	}
 
+	ctx.waitUntil(clearDirectoryCache());
 	return new Response(`Keys cleared: ${toDeleteArray.join('\n')}`, { status: 201 });
 };
 
