@@ -3,7 +3,7 @@
 
 import { Bindings } from '../src/bindings';
 import { Context, WaitUntilFunc } from '../src/context';
-import { ConsoleLogger, Logger } from '../src/context/logging';
+import { ConsoleLogger, Logger, ESLogger } from '../src/context/logging';
 import { MetricsRegistry } from '../src/context/metrics';
 
 export class MockCache implements Cache {
@@ -53,12 +53,14 @@ export interface MockContextOptions {
 	ectx: ExecutionContext;
 	logger?: Logger;
 	metrics?: MetricsRegistry;
+	eslogger?: ESLogger;
 	waitUntilFunc?: WaitUntilFunc;
 }
 
 export const getContext = (options: MockContextOptions): Context => {
 	const logger = options.logger ?? new ConsoleLogger();
 	const metrics = options.metrics ?? new MetricsRegistry(options.env, {});
+	const eslogger = options.eslogger ?? new ESLogger(options.env, {});
 	const waitUntilFunc = options.waitUntilFunc || options.ectx.waitUntil.bind(options.ectx);
-	return new Context(options.env, waitUntilFunc, logger, metrics);
+	return new Context(options.env, waitUntilFunc, logger, metrics, eslogger);
 };

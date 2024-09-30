@@ -125,6 +125,7 @@ export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 		cachedResponse = await cache.match(DIRECTORY_CACHE_REQUEST);
 	} catch (e: unknown) {
 		const err = e as Error;
+		ctx.elasticLogger.log('ERROR', { event: 'Failed to retrieve from cache', error: err.message });
 		throw new InternalCacheError(err.message);
 	}
 	if (cachedResponse) {
@@ -212,7 +213,7 @@ export const handleRotateKey = async (ctx: Context, _request?: Request) => {
 		customMetadata: metadata,
 	});
 
-	ctx.elasticLogger.log('INFO', { event: 'Key rotated', keyId: tokenKeyID });
+	ctx.elasticLogger.log('INFO', { event: 'Key rotated successfully', keyId: tokenKeyID });
 
 	ctx.waitUntil(clearDirectoryCache());
 
@@ -253,9 +254,18 @@ const handleClearKey = async (ctx: Context, _request?: Request) => {
 
 	const toDeleteArray = [...toDelete];
 
-	await ctx.bucket.ISSUANCE_KEYS.delete(toDeleteArray);
-	ctx.waitUntil(clearDirectoryCache());
+	try {
+		await ctx.bucket.ISSUANCE_KEYS.delete(toDeleteArray);
+		ctx.elasticLogger.log('INFO', {
+			event: 'Keys to Clear',
+			count: toDeleteArray.length,
+			keys: toDeleteArray,
+		});
+	} catch (e) {
+		throw new Error('Failed to delete keys');
+	}
 
+	ctx.waitUntil(clearDirectoryCache());
 	return new Response(`Keys cleared: ${toDeleteArray.join('\n')}`, { status: 201 });
 };
 

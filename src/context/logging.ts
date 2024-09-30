@@ -150,19 +150,19 @@ export class ConsoleLogger implements Logger {
 		// eslint-disable-next-line no-console
 		console.error(err.stack);
 	}
-	setTag(key: string, value: string): void { }
-	setSampleRate(sampleRate: number): void { }
-	addBreadcrumb(breadcrumb: Breadcrumb): void { }
+	setTag(key: string, value: string): void {}
+	setSampleRate(sampleRate: number): void {}
+	addBreadcrumb(breadcrumb: Breadcrumb): void {}
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	info(category: string, message: string, data?: { [key: string]: any }): void { }
+	info(category: string, message: string, data?: { [key: string]: any }): void {}
 }
 
 export class VoidLogger implements Logger {
-	setTag(key: string, value: string): void { }
-	setSampleRate(sampleRate: number): void { }
-	addBreadcrumb(breadcrumb: Breadcrumb): void { }
-	captureException(e: Error): void { }
-	info(category: string, message: string, data?: { [key: string]: any }): void { }
+	setTag(key: string, value: string): void {}
+	setSampleRate(sampleRate: number): void {}
+	addBreadcrumb(breadcrumb: Breadcrumb): void {}
+	captureException(e: Error): void {}
+	info(category: string, message: string, data?: { [key: string]: any }): void {}
 }
 
 export interface ESLoggerOptions {
@@ -173,7 +173,6 @@ export class ESLogger {
 	env: Bindings;
 	options: ESLoggerOptions;
 	private logs: any[] = [];
-
 
 	constructor(env: Bindings, options: ESLoggerOptions) {
 		this.env = env;
@@ -196,7 +195,6 @@ export class ESLogger {
 		}
 	}
 
-
 	async publish(): Promise<void> {
 		const body = JSON.stringify({
 			logs: this.logs.map(log => ({
@@ -204,7 +202,7 @@ export class ESLogger {
 				level: log.level || 'INFO',
 				env: log.env,
 				service: log.service,
-			}))
+			})),
 		});
 
 		if (this.options.bearerToken) {
@@ -212,7 +210,7 @@ export class ESLogger {
 				await fetch(KIBANA_ENDPOINT, {
 					method: 'POST',
 					headers: {
-						Authorization: `Bearer ${this.options.bearerToken}`,
+						'Authorization': `Bearer ${this.options.bearerToken}`,
 						'Content-Type': 'application/json',
 					},
 					body,
@@ -223,7 +221,6 @@ export class ESLogger {
 		}
 		this.reset();
 	}
-
 
 	reset(): void {
 		this.logs.length = 0;

@@ -20,7 +20,7 @@ export class Context {
 		private _waitUntil: WaitUntilFunc,
 		public logger: Logger,
 		public metrics: MetricsRegistry,
-		public elasticLogger: ESLogger,
+		public elasticLogger: ESLogger
 	) {
 		const cache = new CascadingCache(new InMemoryCache(), new APICache('r2/issuance_keys'));
 		const cachedR2Bucket = new CachedR2Bucket(this, env.ISSUANCE_KEYS, cache);
