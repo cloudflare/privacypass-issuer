@@ -166,7 +166,13 @@ export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 			etag,
 		},
 	});
-	ctx.waitUntil(cache.put(DIRECTORY_CACHE_REQUEST, response.clone()));
+	const toCacheResponse = response.clone();
+	// directory cache time within worker should be between 70% and 100% of browser cache time
+	const cacheTime = Math.floor(
+		Number.parseInt(ctx.env.DIRECTORY_CACHE_MAX_AGE_SECONDS) * (0.7 + 0.3 * Math.random())
+	).toFixed(0);
+	toCacheResponse.headers.set('cache-control', `public, max-age=${cacheTime}`);
+	ctx.waitUntil(cache.put(DIRECTORY_CACHE_REQUEST, toCacheResponse));
 
 	return response;
 };
