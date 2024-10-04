@@ -60,30 +60,41 @@ const deserialize = <T>(value: string): T => {
 	});
 };
 
+// InMemoryCache uses workers memory to cache item
+// Note it's up only until the worker is reloaded
+// There is no lifjetime guarantee
+// dev: the use of ctx is to enable stale-while-revalidate like behaviour
 export class InMemoryCache implements ReadableCache {
 	private store: Map<string, CacheElement<string>>;
 
-	constructor() {
+	constructor(private ctx: Context) {
 		this.store = new Map();
 	}
 
 	async read<T>(key: string, setValFn: (key: string) => Promise<CacheElement<T>>): Promise<T> {
+		const refreshCache = async () => {
+			const val = await setValFn(key);
+			const newCacheValue = { value: serialize(val.value), expiration: val.expiration };
+			this.store.set(key, newCacheValue);
+			return val.value;
+		};
+
 		const cachedValue = this.store.get(key);
 		if (cachedValue) {
-			if (cachedValue.expiration > new Date()) {
-				return deserialize(cachedValue.value);
+			if (cachedValue.expiration <= new Date()) {
+				this.ctx.waitUntil(refreshCache());
 			}
-			this.store.delete(key);
+			return deserialize(cachedValue.value);
 		}
-		const val = await setValFn(key);
-		const newCacheValue = { value: serialize(val.value), expiration: val.expiration };
-		this.store.set(key, newCacheValue);
-		return val.value;
+		return refreshCache();
 	}
 }
 
 export class APICache implements ReadableCache {
-	constructor(private cacheKey: string) {}
+	constructor(
+		private ctx: Context,
+		private cacheKey: string
+	) {}
 
 	async read<T>(key: string, setValFn: (key: string) => Promise<CacheElement<T>>): Promise<T> {
 		const cache = await caches.open(this.cacheKey);
