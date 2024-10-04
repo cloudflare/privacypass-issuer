@@ -102,6 +102,8 @@ export const handleTokenRequest = async (ctx: Context, request: Request) => {
 	const signedToken = await issuer.issue(tokenRequest);
 	ctx.metrics.signedTokenTotal.inc({ key_id: keyID });
 
+	console.log(`Token issued successfully for key ${keyID}`);
+
 	return new Response(signedToken.serialize(), {
 		headers: { 'content-type': MediaType.PRIVATE_TOKEN_RESPONSE },
 	});
@@ -218,6 +220,8 @@ export const handleRotateKey = async (ctx: Context, _request?: Request) => {
 
 	ctx.waitUntil(clearDirectoryCache());
 
+	console.log(`Key rotated successfully, new key ${tokenKeyID}`);
+
 	return new Response(`New key ${publicKeyEnc}`, { status: 201 });
 };
 
@@ -256,6 +260,7 @@ const handleClearKey = async (ctx: Context, _request?: Request) => {
 	const toDeleteArray = [...toDelete];
 
 	await ctx.bucket.ISSUANCE_KEYS.delete(toDeleteArray);
+	console.log(`Keys cleared: ${toDeleteArray.join('\n')}`);
 	ctx.waitUntil(clearDirectoryCache());
 
 	return new Response(`Keys cleared: ${toDeleteArray.join('\n')}`, { status: 201 });
