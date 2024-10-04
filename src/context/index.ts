@@ -21,10 +21,10 @@ export class Context {
 		public logger: Logger,
 		public metrics: MetricsRegistry
 	) {
-		const cache = new CascadingCache(new InMemoryCache(), new APICache('r2/issuance_keys'));
-		const cachedR2Bucket = new CachedR2Bucket(this, env.ISSUANCE_KEYS, cache);
 		// eslint-disable-next-line @typescript-eslint/no-this-alias
 		const ctx = this;
+		const cache = new CascadingCache(new InMemoryCache(ctx), new APICache(ctx, 'r2/issuance_keys'));
+		const cachedR2Bucket = new CachedR2Bucket(ctx, env.ISSUANCE_KEYS, cache);
 
 		const cachedR2BucketWithRetries = new Proxy(cachedR2Bucket, {
 			get: (target, prop, receiver) => {
