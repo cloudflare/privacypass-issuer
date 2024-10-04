@@ -62,7 +62,7 @@ const deserialize = <T>(value: string): T => {
 
 // InMemoryCache uses workers memory to cache item
 // Note it's up only until the worker is reloaded
-// There is no lifjetime guarantee
+// There is no lifetime guarantee
 // dev: the use of ctx is to enable stale-while-revalidate like behaviour
 export class InMemoryCache implements ReadableCache {
 	private store: Map<string, CacheElement<string>>;
@@ -82,36 +82,61 @@ export class InMemoryCache implements ReadableCache {
 		const cachedValue = this.store.get(key);
 		if (cachedValue) {
 			if (cachedValue.expiration <= new Date()) {
+				console.log('InMemoryCache is stale. Revalidating with waitUntil.');
 				this.ctx.waitUntil(refreshCache());
 			}
 			return deserialize(cachedValue.value);
+		} else {
+			console.log(`No cached value for key: ${key}. Initializing cache.`);
 		}
 		return refreshCache();
 	}
 }
 
+// APICache uses workers API cache
+// This is local to a colo, and does not involve tiered cache or zone configuration, as the worker is the origin
+// Lifetime is artifitially extended by 30s to allow for stale-while-revalidate like behaviour
+// dev: the use of ctx is to enable stale-while-revalidate like behaviour
 export class APICache implements ReadableCache {
+	private static STALE_WHILE_REVALIDATE_IN_S = 30 * 1000;
+
 	constructor(
 		private ctx: Context,
 		private cacheKey: string
-	) {}
+	) { }
 
 	async read<T>(key: string, setValFn: (key: string) => Promise<CacheElement<T>>): Promise<T> {
 		const cache = await caches.open(this.cacheKey);
 		const request = new Request(`https://${FAKE_DOMAIN_CACHE}/${key}`);
+		const refreshCache = async () => {
+			console.log(`Refreshing API cache for key: ${key}`);
+			const val = await setValFn(key);
+			// interval to revalidate a cache value
+			val.expiration.setTime(val.expiration.getTime() + APICache.STALE_WHILE_REVALIDATE_IN_S);
+			await cache.put(
+				request,
+				new Response(serialize(val.value), {
+					headers: { expires: val.expiration.toUTCString() },
+				})
+			);
+			return val.value;
+		};
+
 		const cachedValue = await cache.match(request);
 		if (cachedValue) {
+			const now = Date.now();
+			const expiration = new Date(cachedValue.headers.get('expires') ?? now).getTime();
+			if (expiration - APICache.STALE_WHILE_REVALIDATE_IN_S < now) {
+				console.log(`APICache is stale for key: ${key}. Revalidating with waitUntil.`);
+				console.log('APICache is stale. Revalidating with waitUntil.');
+				this.ctx.waitUntil(refreshCache());
+			}
 			const val = await cachedValue.text();
 			return deserialize(val);
+		} else {
+			console.log(`No cached value in API cache for key: ${key}. Initializing cache.`);
 		}
-		const val = await setValFn(key);
-		await cache.put(
-			request,
-			new Response(serialize(val.value), {
-				headers: { expires: val.expiration.toUTCString() },
-			})
-		);
-		return val.value;
+		return refreshCache();
 	}
 }
 

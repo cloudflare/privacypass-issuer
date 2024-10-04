@@ -38,7 +38,8 @@ interface StorageMetadata extends Record<string, string> {
 	tokenKeyID: string;
 }
 
-const KEY_LIFESPAN = 48 * 60 * 60 * 1000;
+// const KEY_LIFESPAN = 48 * 60 * 60 * 1000;
+const KEY_LIFESPAN = 2 * 60 * 1000; // 2 minutes in milliseconds
 
 export const handleTokenRequest = async (ctx: Context, request: Request) => {
 	ctx.metrics.issuanceRequestTotal.inc({ version: ctx.env.VERSION_METADATA.id ?? RELEASE });
