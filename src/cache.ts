@@ -60,6 +60,51 @@ const deserialize = <T>(value: string): T => {
 	});
 };
 
+export const STALE_WHILE_REVALIDATE_IN_MS = 30_000;
+
+// Helper function to smooth cache revalidation
+// It limits the thundering herd problem when cache expires
+// The maximum cache staleness is defined as 30s via STALE_WHILE_REVALIDATE_IN_MS
+// During the revalidation window, the closest a request time is to cache expiration, the higher revalidation probability
+// dev: An alternative to probalistic stale-while-revalidate is to use a lock, or possibly a rate limit rules
+// dev: None of these features are stable in Cloudflare Workers
+// dev2: Somehow there is a paper describing the optimal way to do early expiration, which is similar to stale while revalidate
+// dev2: The paper uses exp(x) intead of 2^x, which is the same with a different beta
+// dev2: https://cseweb.ucsd.edu//~avattani/papers/cache_stampede.pdf
+export function shouldRevalidate(expirationDate: Date): boolean {
+	const now = Date.now();
+	const expiration = expirationDate.getTime();
+
+	const timeSinceExpiration = now - expiration;
+	// Content has not expired
+	if (timeSinceExpiration <= 0) {
+		return false;
+	}
+	// Content should not be served even if stale
+	if (timeSinceExpiration >= STALE_WHILE_REVALIDATE_IN_MS) {
+		return true;
+	}
+
+	// Floor reduces the number of possible values for timeSinceExpirationWholeSeconds to 30
+	// dev: performance is gained by pre-computing probabilityThreshold possible values
+	// Regenerate PRECOMPUTED_PROBABILITY_THESHOLD:
+	// const REVALIDATION_STEEPNESS = 1
+	// const STALE_WHILE_REVALIDATE_IN_MS = 30_000
+	// [...Array(STALE_WHILE_REVALIDATE_IN_MS/1000).keys()].map((t) => Math.pow(2, -REVALIDATION_STEEPNESS*(STALE_WHILE_REVALIDATE_IN_MS/1000-t)))
+	const PRECOMPUTED_PROBABILITY_THESHOLD = [
+		9.313225746154785e-10, 1.862645149230957e-9, 3.725290298461914e-9, 7.450580596923828e-9,
+		1.490116119384765e-8, 2.980232238769531e-8, 5.960464477539063e-8, 1.192092895507812e-7,
+		2.384185791015625e-7, 4.76837158203125e-7, 9.5367431640625e-7, 0.0000019073486328125,
+		0.000003814697265625, 0.00000762939453125, 0.0000152587890625, 0.000030517578125,
+		0.00006103515625, 0.0001220703125, 0.000244140625, 0.00048828125, 0.0009765625, 0.001953125,
+		0.00390625, 0.0078125, 0.015625, 0.03125, 0.0625, 0.125, 0.25, 0.5,
+	];
+	const timeSinceExpirationWholeSeconds = Math.floor(timeSinceExpiration / 1000);
+	const probabilityThreshold = PRECOMPUTED_PROBABILITY_THESHOLD[timeSinceExpirationWholeSeconds];
+
+	return Math.random() < probabilityThreshold;
+}
+
 // InMemoryCache uses workers memory to cache item
 // Note it's up only until the worker is reloaded
 // There is no lifetime guarantee
@@ -81,10 +126,16 @@ export class InMemoryCache implements ReadableCache {
 
 		const cachedValue = this.store.get(key);
 		if (cachedValue) {
-			if (cachedValue.expiration <= new Date()) {
-				console.log('InMemoryCache is stale. Revalidating with waitUntil.');
-				this.ctx.waitUntil(refreshCache());
-			}
+			this.ctx.waitUntil(
+				(() => {
+					const expiration = new Date(cachedValue.expiration.getTime());
+					if (shouldRevalidate(expiration)) {
+						console.log('InMemoryCache is stale. Revalidating with waitUntil.');
+						return refreshCache();
+					}
+					return Promise.resolve();
+				})()
+			);
 			return deserialize(cachedValue.value);
 		}
 		return refreshCache();
@@ -96,8 +147,6 @@ export class InMemoryCache implements ReadableCache {
 // Lifetime is artifitially extended by 30s to allow for stale-while-revalidate like behaviour
 // dev: the use of ctx is to enable stale-while-revalidate like behaviour
 export class APICache implements ReadableCache {
-	private static STALE_WHILE_REVALIDATE_IN_S = 30 * 1000;
-
 	constructor(
 		private ctx: Context,
 		private cacheKey: string
@@ -108,12 +157,15 @@ export class APICache implements ReadableCache {
 		const request = new Request(`https://${FAKE_DOMAIN_CACHE}/${key}`);
 		const refreshCache = async () => {
 			const val = await setValFn(key);
-			// interval to revalidate a cache value
-			val.expiration.setTime(val.expiration.getTime() + APICache.STALE_WHILE_REVALIDATE_IN_S);
+			// add an extension to cache time which allow for stale-while-revalidate behaviour
+			val.expiration.setTime(val.expiration.getTime() + STALE_WHILE_REVALIDATE_IN_MS);
 			await cache.put(
 				request,
 				new Response(serialize(val.value), {
-					headers: { expires: val.expiration.toUTCString() },
+					headers: {
+						'expires': val.expiration.toUTCString(),
+						'x-expires': val.expiration.toUTCString(), // somehow `expires` header is modified by cache. Using a distinct header allows the header to be preserved for internal processing
+					},
 				})
 			);
 			return val.value;
@@ -121,12 +173,20 @@ export class APICache implements ReadableCache {
 
 		const cachedValue = await cache.match(request);
 		if (cachedValue) {
-			const now = Date.now();
-			const expiration = new Date(cachedValue.headers.get('expires') ?? now).getTime();
-			if (expiration - APICache.STALE_WHILE_REVALIDATE_IN_S < now) {
-				console.log('APICache is stale. Revalidating with waitUntil.');
-				this.ctx.waitUntil(refreshCache());
-			}
+			this.ctx.waitUntil(
+				(() => {
+					const now = Date.now();
+					const expirationWithRevalidate = new Date(cachedValue.headers.get('x-expires') ?? now);
+					const expiration = new Date(
+						expirationWithRevalidate.getTime() - STALE_WHILE_REVALIDATE_IN_MS
+					);
+					if (shouldRevalidate(expiration)) {
+						console.log('APICache is stale. Revalidating with waitUntil.');
+						return refreshCache();
+					}
+					return Promise.resolve();
+				})()
+			);
 			const val = await cachedValue.text();
 			return deserialize(val);
 		}
