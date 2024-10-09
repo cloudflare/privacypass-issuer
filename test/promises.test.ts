@@ -25,7 +25,11 @@ describe('asyncRetries', () => {
 	}
 
 	it('should work for a promise always resolving', async () => {
-		const ctx = getContext({ env: getEnv(), ectx: new ExecutionContextMock() });
+		const ctx = getContext({
+			request: new Request('http://localhost'),
+			env: getEnv(),
+			ectx: new ExecutionContextMock(),
+		});
 
 		const f = jest.fn(() => Promise.resolve(sampleResolve));
 		const retriesF = asyncRetries(ctx, f);
@@ -35,7 +39,11 @@ describe('asyncRetries', () => {
 	});
 
 	it('should work for a promise failing once', async () => {
-		const ctx = getContext({ env: getEnv(), ectx: new ExecutionContextMock() });
+		const ctx = getContext({
+			request: new Request('http://localhost'),
+			env: getEnv(),
+			ectx: new ExecutionContextMock(),
+		});
 
 		const f = jest.fn(generateRejectsBeforeResolvePromise(1, sampleResolve, sampleReject));
 		const retriesF = asyncRetries(ctx, f);
@@ -46,7 +54,11 @@ describe('asyncRetries', () => {
 
 	it('should reject for a promise failing twice and retry count at 2', async () => {
 		const retryCount = DEFAULT_RETRIES;
-		const ctx = getContext({ env: getEnv(), ectx: new ExecutionContextMock() });
+		const ctx = getContext({
+			request: new Request('http://localhost'),
+			env: getEnv(),
+			ectx: new ExecutionContextMock(),
+		});
 
 		const f = jest.fn(generateRejectsBeforeResolvePromise(retryCount, sampleResolve, sampleReject));
 		const retriesF = asyncRetries(ctx, f, retryCount);
@@ -61,7 +73,11 @@ describe('asyncRetries', () => {
 
 	it('should work for a promise failing twice and retry count at 3', async () => {
 		const retryCount = 3;
-		const ctx = getContext({ env: getEnv(), ectx: new ExecutionContextMock() });
+		const ctx = getContext({
+			request: new Request('http://localhost'),
+			env: getEnv(),
+			ectx: new ExecutionContextMock(),
+		});
 
 		const f = jest.fn(
 			generateRejectsBeforeResolvePromise(retryCount - 1, sampleResolve, sampleReject)
@@ -73,7 +89,11 @@ describe('asyncRetries', () => {
 	});
 
 	it('should reject a promise always failing', async () => {
-		const ctx = getContext({ env: getEnv(), ectx: new ExecutionContextMock() });
+		const ctx = getContext({
+			request: new Request('http://localhost'),
+			env: getEnv(),
+			ectx: new ExecutionContextMock(),
+		});
 
 		const f = jest.fn(() => Promise.reject(sampleReject));
 		const retriesF = asyncRetries(ctx, f);

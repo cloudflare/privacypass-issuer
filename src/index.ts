@@ -122,7 +122,7 @@ export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 	const cache = await getDirectoryCache();
 	let cachedResponse: Response | undefined;
 	try {
-		cachedResponse = await cache.match(DIRECTORY_CACHE_REQUEST);
+		cachedResponse = await cache.match(DIRECTORY_CACHE_REQUEST(ctx.hostname));
 	} catch (e: unknown) {
 		const err = e as Error;
 		throw new InternalCacheError(err.message);
@@ -174,7 +174,7 @@ export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 		Number.parseInt(ctx.env.DIRECTORY_CACHE_MAX_AGE_SECONDS) * (0.7 + 0.3 * Math.random())
 	).toFixed(0);
 	toCacheResponse.headers.set('cache-control', `public, max-age=${cacheTime}`);
-	ctx.waitUntil(cache.put(DIRECTORY_CACHE_REQUEST, toCacheResponse));
+	ctx.waitUntil(cache.put(DIRECTORY_CACHE_REQUEST(ctx.hostname), toCacheResponse));
 
 	return response;
 };
@@ -218,7 +218,7 @@ export const handleRotateKey = async (ctx: Context, _request?: Request) => {
 		customMetadata: metadata,
 	});
 
-	ctx.waitUntil(clearDirectoryCache());
+	ctx.waitUntil(clearDirectoryCache(ctx));
 
 	console.log(`Key rotated successfully, new key ${tokenKeyID}`);
 
@@ -261,7 +261,7 @@ const handleClearKey = async (ctx: Context, _request?: Request) => {
 
 	await ctx.bucket.ISSUANCE_KEYS.delete(toDeleteArray);
 	console.log(`Keys cleared: ${toDeleteArray.join('\n')}`);
-	ctx.waitUntil(clearDirectoryCache());
+	ctx.waitUntil(clearDirectoryCache(ctx));
 
 	return new Response(`Keys cleared: ${toDeleteArray.join('\n')}`, { status: 201 });
 };
@@ -288,6 +288,7 @@ export default {
 
 	async scheduled(event: ScheduledEvent, env: Bindings, ectx: ExecutionContext) {
 		const ctx = new Context(
+			new Request(`https://schedule.example.com`),
 			env,
 			ectx.waitUntil.bind(ectx),
 			new ConsoleLogger(),
