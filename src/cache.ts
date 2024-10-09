@@ -6,19 +6,16 @@ import { Context } from './context';
 import { b64Tou8, u8ToB64 } from './utils/base64';
 import { PRIVATE_TOKEN_ISSUER_DIRECTORY } from '@cloudflare/privacypass-ts';
 
-export const FAKE_DOMAIN_CACHE = 'cache.local';
-
 export const getDirectoryCache = async (): Promise<Cache> => {
 	return caches.open('response/issuer-directory');
 };
 
-export const DIRECTORY_CACHE_REQUEST = new Request(
-	`https://${FAKE_DOMAIN_CACHE}${PRIVATE_TOKEN_ISSUER_DIRECTORY}`
-);
+export const DIRECTORY_CACHE_REQUEST = (hostname: string) =>
+	new Request(`https://${hostname}${PRIVATE_TOKEN_ISSUER_DIRECTORY}`);
 
-export const clearDirectoryCache = async (): Promise<boolean> => {
+export const clearDirectoryCache = async (ctx: Context): Promise<boolean> => {
 	const cache = await getDirectoryCache();
-	return cache.delete(DIRECTORY_CACHE_REQUEST);
+	return cache.delete(DIRECTORY_CACHE_REQUEST(ctx.hostname));
 };
 
 export type CacheElement<T> = { value: T; expiration: Date };
@@ -154,7 +151,7 @@ export class APICache implements ReadableCache {
 
 	async read<T>(key: string, setValFn: (key: string) => Promise<CacheElement<T>>): Promise<T> {
 		const cache = await caches.open(this.cacheKey);
-		const request = new Request(`https://${FAKE_DOMAIN_CACHE}/${key}`);
+		const request = new Request(`https://${this.ctx.hostname}/${key}`);
 		const refreshCache = async () => {
 			const val = await setValFn(key);
 			// add an extension to cache time which allow for stale-while-revalidate behaviour

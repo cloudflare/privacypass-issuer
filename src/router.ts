@@ -120,7 +120,7 @@ export class Router {
 				coloName: request?.cf?.colo as string,
 			});
 		}
-		return new Context(env, ectx.waitUntil.bind(ectx), logger, metrics);
+		return new Context(request, env, ectx.waitUntil.bind(ectx), logger, metrics);
 	}
 
 	private async postProcessing(ctx: Context) {

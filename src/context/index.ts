@@ -10,12 +10,14 @@ import { MetricsRegistry } from './metrics';
 export type WaitUntilFunc = (p: Promise<unknown>) => void;
 
 export class Context {
+	public hostname: string;
 	public startTime: number;
 	private promises: Promise<unknown>[] = [];
 	public bucket: { ISSUANCE_KEYS: CachedR2Bucket };
 	public performance: Performance;
 
 	constructor(
+		request: Request,
 		public env: Bindings,
 		private _waitUntil: WaitUntilFunc,
 		public logger: Logger,
@@ -39,6 +41,7 @@ export class Context {
 			},
 		});
 
+		this.hostname = new URL(request.url).hostname;
 		this.bucket = {
 			ISSUANCE_KEYS: cachedR2BucketWithRetries,
 		};
