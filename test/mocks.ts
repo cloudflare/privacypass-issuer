@@ -49,6 +49,7 @@ export class ExecutionContextMock implements ExecutionContext {
 export const getEnv = (): Bindings => getMiniflareBindings();
 
 export interface MockContextOptions {
+	request: Request;
 	env: Bindings;
 	ectx: ExecutionContext;
 	logger?: Logger;
@@ -60,5 +61,5 @@ export const getContext = (options: MockContextOptions): Context => {
 	const logger = options.logger ?? new ConsoleLogger();
 	const metrics = options.metrics ?? new MetricsRegistry(options.env, {});
 	const waitUntilFunc = options.waitUntilFunc || options.ectx.waitUntil.bind(options.ectx);
-	return new Context(options.env, waitUntilFunc, logger, metrics);
+	return new Context(options.request, options.env, waitUntilFunc, logger, metrics);
 };
