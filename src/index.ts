@@ -138,15 +138,19 @@ export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 	}
 	ctx.metrics.directoryCacheMissTotal.inc();
 
-	const keys = await ctx.bucket.ISSUANCE_KEYS.list({ include: ['customMetadata'] });
+	const keyList = await ctx.bucket.ISSUANCE_KEYS.list({ include: ['customMetadata'] });
 
-	if (keys.objects.length === 0) {
+	if (keyList.objects.length === 0) {
 		throw new Error('Issuer not initialised');
 	}
 
+	const keys = keyList.objects.sort(
+		(a, b) => new Date(b.uploaded).getTime() - new Date(a.uploaded).getTime()
+	);
+
 	const directory: IssuerConfigurationResponse = {
 		'issuer-request-uri': '/token-request',
-		'token-keys': keys.objects.map(key => ({
+		'token-keys': keys.map(key => ({
 			'token-type': TokenType.BlindRSA,
 			'token-key': (key.customMetadata as StorageMetadata).publicKey,
 			'not-before': Math.trunc(new Date(key.uploaded).getTime() / 1000), // the spec mandates to use seconds
