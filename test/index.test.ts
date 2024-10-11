@@ -17,8 +17,31 @@ import {
 	util,
 } from '@cloudflare/privacypass-ts';
 import { getDirectoryCache } from '../src/cache';
-import { shouldRotateKey } from '../src/utils/keyRotation';
+import {
+	shouldRotateKey,
+	shouldClearKey,
+	matchCronTime,
+	getPrevRotationTime,
+} from '../src/utils/keyRotation';
 const { TokenRequest } = publicVerif;
+
+// import * as keyRotation from '../src/utils/keyRotation'; // Import all as keyRotation
+
+// jest.unstable_mockModule('../src/utils/keyRotation', () => ({
+// 	matchCronTime: jest.fn(),
+// }));
+
+import * as keyRotation from '../src/utils/keyRotation';
+
+// Mock the entire module and ensure matchCronTime is mocked
+jest.mock('../src/utils/keyRotation', () => {
+	const originalModule = jest.requireActual<typeof keyRotation>('../src/utils/keyRotation');
+	return {
+		__esModule: true, // Important for ESModules
+		...originalModule,
+		matchCronTime: jest.fn(), // mock matchCronTime
+	};
+});
 
 const sampleURL = 'http://localhost';
 
@@ -354,5 +377,86 @@ describe('key rotation', () => {
 
 		const date = new Date('2023-08-01T00:01:00.010Z');
 		expect(shouldRotateKey(date, ctx.env)).toBe(true);
+	});
+});
+
+describe('shouldClearKey Function', () => {
+	it('should not clear key when neither expiration time has passed', () => {
+		const keyUploadTime = new Date('2023-10-01T12:00:00Z');
+		const now = new Date('2023-10-02T11:59:59Z');
+		const effectivePrevTime = new Date('2023-09-30T00:00:00Z').getTime();
+
+		const result = shouldClearKey(keyUploadTime, now, effectivePrevTime);
+		expect(result).toBe(false);
+	});
+
+	it('should not clear key when per-key expiration has passed but rotation-based expiration has not', () => {
+		const keyUploadTime = new Date('2023-09-29T12:00:00Z');
+		const now = new Date('2023-10-01T12:00:01Z');
+		const effectivePrevTime = new Date('2023-10-03T00:00:00Z').getTime();
+
+		const result = shouldClearKey(keyUploadTime, now, effectivePrevTime);
+		expect(result).toBe(false);
+	});
+
+	it('should not clear key when rotation-based expiration has passed but per-key expiration has not', () => {
+		const keyUploadTime = new Date('2023-10-03T12:00:00Z');
+		const now = new Date('2023-10-05T11:59:59Z');
+		const effectivePrevTime = new Date('2023-10-01T00:00:00Z').getTime();
+
+		const result = shouldClearKey(keyUploadTime, now, effectivePrevTime);
+		expect(result).toBe(false);
+	});
+
+	it('should clear key when both expiration times have passed', () => {
+		const keyUploadTime = new Date('2023-09-29T12:00:00Z');
+		const now = new Date('2023-10-05T12:00:01Z');
+		const effectivePrevTime = new Date('2023-09-30T00:00:00Z').getTime();
+
+		const result = shouldClearKey(keyUploadTime, now, effectivePrevTime);
+		expect(result).toBe(true);
+	});
+
+	it('should clear key when current time equals the maximum expiration time', () => {
+		const keyUploadTime = new Date('2023-10-01T12:00:00Z');
+		const now = new Date('2023-10-03T12:00:00Z');
+		const effectivePrevTime = new Date('2023-10-01T12:00:00Z').getTime();
+
+		const result = shouldClearKey(keyUploadTime, now, effectivePrevTime);
+		expect(result).toBe(true);
+	});
+});
+
+describe('getPrevRotationTime Function', () => {
+	it('should return the maximum of prevTime and mostRecentKeyUploadTime when ROTATION_CRON_STRING is valid', () => {
+		const ctx = getContext({
+			request: new Request('https://example.com'),
+			env: getEnv(),
+			ectx: new ExecutionContextMock(),
+		});
+
+		const mostRecentKeyUploadTime = new Date('2023-10-03T12:00:00Z');
+		ctx.env.ROTATION_CRON_STRING = '* * * * *';
+
+		const expectedPrevTime = new Date('2023-10-03T00:00:00Z').getTime();
+		const expected = Math.max(expectedPrevTime, mostRecentKeyUploadTime.getTime());
+
+		const result = getPrevRotationTime(mostRecentKeyUploadTime, ctx);
+		expect(result).toBe(expected);
+	});
+
+	it('should return mostRecentKeyUploadTime when ROTATION_CRON_STRING is not set', () => {
+		const ctx = getContext({
+			request: new Request('https://example.com'),
+			env: getEnv(),
+			ectx: new ExecutionContextMock(),
+		});
+
+		ctx.env.ROTATION_CRON_STRING = undefined;
+		const mostRecentKeyUploadTime = new Date('2023-10-03T12:00:00Z');
+		const expected = mostRecentKeyUploadTime.getTime();
+
+		const result = getPrevRotationTime(mostRecentKeyUploadTime, ctx);
+		expect(result).toBe(expected);
 	});
 });
