@@ -25,7 +25,7 @@ import { hexEncode } from './utils/hex';
 import { DIRECTORY_CACHE_REQUEST, clearDirectoryCache, getDirectoryCache } from './cache';
 const { BlindRSAMode, Issuer, TokenRequest } = publicVerif;
 
-import { shouldRotateKey } from './utils/keyRotation';
+import { getPrevRotationTime, shouldRotateKey, shouldClearKey } from './utils/keyRotation';
 
 const keyToTokenKeyID = async (key: Uint8Array): Promise<number> => {
 	const hash = await crypto.subtle.digest('SHA-256', key);
@@ -37,8 +37,6 @@ interface StorageMetadata extends Record<string, string> {
 	publicKey: string;
 	tokenKeyID: string;
 }
-
-const KEY_LIFESPAN = 48 * 60 * 60 * 1000;
 
 export const handleTokenRequest = async (ctx: Context, request: Request) => {
 	ctx.metrics.issuanceRequestTotal.inc({ version: ctx.env.VERSION_METADATA.id ?? RELEASE });
@@ -231,31 +229,40 @@ export const handleRotateKey = async (ctx: Context, _request?: Request) => {
 
 const handleClearKey = async (ctx: Context, _request?: Request) => {
 	ctx.metrics.keyClearTotal.inc();
-
-	const now = Date.now();
+	const now = new Date();
 
 	const keys = await ctx.bucket.ISSUANCE_KEYS.list({ shouldUseCache: false });
 
+	if (keys.objects.length === 0) {
+		return new Response('No keys to clear', { status: 201 });
+	}
+
+	// iterating twice over keys, because we need to know the latest upload key time to enforce key clearance
+	// Find the latest key based on the upload time
 	let latestKey = keys.objects[0];
-	const toDelete: Set<string> = new Set();
-
 	for (const key of keys.objects) {
-		const keyUploadTime = new Date(key.uploaded).getTime();
-		const keyExpirationTime = keyUploadTime + KEY_LIFESPAN;
-
-		if (keyExpirationTime < now) {
-			toDelete.add(key.key);
-		}
-
-		if (latestKey.uploaded < key.uploaded) {
+		if (new Date(key.uploaded).getTime() > new Date(latestKey.uploaded).getTime()) {
 			latestKey = key;
 		}
 	}
 
-	// Ensure the latest key is never deleted
-	if (toDelete.has(latestKey.key)) {
-		toDelete.delete(latestKey.key);
+	const effectivePrevRotationTime = getPrevRotationTime(new Date(latestKey.uploaded), ctx);
+
+	if (effectivePrevRotationTime == null) {
+		return new Response('Failed to determine previous rotation time', { status: 500 });
 	}
+
+	const toDelete: Set<string> = new Set();
+
+	for (const key of keys.objects) {
+		const keyUploadTime = new Date(key.uploaded);
+		if (shouldClearKey(keyUploadTime, now, effectivePrevRotationTime)) {
+			toDelete.add(key.key);
+		}
+	}
+
+	// Ensure the latest key is never deleted
+	toDelete.delete(latestKey.key);
 
 	if (toDelete.size === 0) {
 		return new Response('No keys to clear', { status: 201 });
