@@ -6,6 +6,8 @@ import { jest } from '@jest/globals';
 import { asyncRetries, DEFAULT_RETRIES } from '../src/utils/promises';
 import { ExecutionContextMock, getContext, getEnv } from './mocks';
 
+const sampleURL = 'http://localhost';
+
 describe('asyncRetries', () => {
 	const sampleResolve = 2;
 	const sampleReject = 'error';
@@ -26,7 +28,7 @@ describe('asyncRetries', () => {
 
 	it('should work for a promise always resolving', async () => {
 		const ctx = getContext({
-			request: new Request('http://localhost'),
+			request: new Request(sampleURL),
 			env: getEnv(),
 			ectx: new ExecutionContextMock(),
 		});
@@ -40,7 +42,7 @@ describe('asyncRetries', () => {
 
 	it('should work for a promise failing once', async () => {
 		const ctx = getContext({
-			request: new Request('http://localhost'),
+			request: new Request(sampleURL),
 			env: getEnv(),
 			ectx: new ExecutionContextMock(),
 		});
@@ -55,7 +57,7 @@ describe('asyncRetries', () => {
 	it('should reject for a promise failing twice and retry count at 2', async () => {
 		const retryCount = DEFAULT_RETRIES;
 		const ctx = getContext({
-			request: new Request('http://localhost'),
+			request: new Request(sampleURL),
 			env: getEnv(),
 			ectx: new ExecutionContextMock(),
 		});
@@ -74,7 +76,7 @@ describe('asyncRetries', () => {
 	it('should work for a promise failing twice and retry count at 3', async () => {
 		const retryCount = 3;
 		const ctx = getContext({
-			request: new Request('http://localhost'),
+			request: new Request(sampleURL),
 			env: getEnv(),
 			ectx: new ExecutionContextMock(),
 		});
@@ -90,7 +92,7 @@ describe('asyncRetries', () => {
 
 	it('should reject a promise always failing', async () => {
 		const ctx = getContext({
-			request: new Request('http://localhost'),
+			request: new Request(sampleURL),
 			env: getEnv(),
 			ectx: new ExecutionContextMock(),
 		});
