@@ -181,6 +181,33 @@ describe('directory', () => {
 		await initializeKeys();
 	});
 
+	it('should be ordered by latest not-before first', async () => {
+		const directoryRequest = new Request(directoryURL);
+
+		const NUMBER_OF_KEYS_GENERATED = 32; // arbitrary number, but good enough to confirm the ordering is working
+		await initializeKeys(NUMBER_OF_KEYS_GENERATED);
+
+		const response = await workerObject.fetch(
+			directoryRequest,
+			getEnv(),
+			new ExecutionContextMock()
+		);
+		expect(response.ok).toBe(true);
+
+		const directory = (await response.json()) as IssuerConfig;
+
+		let previousDate = Date.now();
+		for (const tokenKey of directory['token-keys']) {
+			if (!tokenKey['not-before']) {
+				continue;
+			}
+			const notBeforeDate = tokenKey['not-before'] * 1000;
+			expect(notBeforeDate).toBeLessThanOrEqual(previousDate);
+
+			previousDate = notBeforeDate;
+		}
+	}, 10_000);
+
 	it('response should be cached', async () => {
 		const mockCaches: Map<string, MockCache> = new Map();
 		const spy = jest.spyOn(caches, 'open').mockImplementation(async (name: string) => {
