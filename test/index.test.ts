@@ -25,12 +25,6 @@ import {
 } from '../src/utils/keyRotation';
 const { TokenRequest } = publicVerif;
 
-// import * as keyRotation from '../src/utils/keyRotation'; // Import all as keyRotation
-
-// jest.unstable_mockModule('../src/utils/keyRotation', () => ({
-// 	matchCronTime: jest.fn(),
-// }));
-
 import * as keyRotation from '../src/utils/keyRotation';
 
 // Mock the entire module and ensure matchCronTime is mocked
@@ -307,130 +301,72 @@ describe('directory', () => {
 });
 
 describe('key rotation', () => {
-	it('should rotate key at every minute', async () => {
-		const ctx = getContext({
-			request: new Request(sampleURL),
-			env: getEnv(),
-			ectx: new ExecutionContextMock(),
-		});
-		ctx.env.ROTATION_CRON_STRING = '* * * * *'; // Every minute
+	it.concurrent.each`
+	name                                                        | rotationCron     | date                          | expected
+	${'rotate key at every minute'}                             | ${'* * * * *'}   | ${'2023-08-01T00:01:00Z'}     | ${true}
+	${'rotate key at midnight on the first day of every month'} | ${'0 0 1 * *'}   | ${'2023-09-01T00:00:00Z'}     | ${true}
+	${'rotate key at 12:30 PM every day'}                       | ${'30 12 * * *'} | ${'2023-08-01T12:30:00Z'}     | ${true}
+	${'not rotate key at noon on a non-rotation day'}           | ${'0 0 1 * *'}   | ${'2023-08-02T12:00:00Z'}     | ${false}
+	${'rotate key at 11:59 PM on the last day of the month'}    | ${'59 23 * * *'} | ${'2023-08-31T23:59:00Z'}     | ${true}
+	${'handle rotation with millisecond precision'}             | ${'* * * * *'}   | ${'2023-08-01T00:01:00.010Z'} | ${true}
+	`(
+		'should $name',
+		async ({
+			rotationCron,
+			date,
+			expected,
+		}: {
+			rotationCron: string;
+			date: string;
+			expected: boolean;
+		}) => {
+			const ctx = getContext({
+				request: new Request(sampleURL),
+				env: getEnv(),
+				ectx: new ExecutionContextMock(),
+			});
+			ctx.env.ROTATION_CRON_STRING = rotationCron;
 
-		const date = new Date('2023-08-01T00:01:00Z');
-		expect(shouldRotateKey(date, ctx.env)).toBe(true);
-	});
-
-	it('should rotate key at midnight on the first day of every month', async () => {
-		const ctx = getContext({
-			request: new Request(sampleURL),
-			env: getEnv(),
-			ectx: new ExecutionContextMock(),
-		});
-		ctx.env.ROTATION_CRON_STRING = '0 0 1 * *'; // At 00:00 on day-of-month 1
-
-		const date = new Date('2023-09-01T00:00:00Z');
-		expect(shouldRotateKey(date, ctx.env)).toBe(true);
-	});
-
-	it('should rotate key at 12:30 PM every day', async () => {
-		const ctx = getContext({
-			request: new Request(sampleURL),
-			env: getEnv(),
-			ectx: new ExecutionContextMock(),
-		});
-		ctx.env.ROTATION_CRON_STRING = '30 12 * * *'; // At 12:30 every day
-
-		const date = new Date('2023-08-01T12:30:00Z');
-		expect(shouldRotateKey(date, ctx.env)).toBe(true);
-	});
-
-	it('should not rotate key at noon on a non-rotation day', async () => {
-		const ctx = getContext({
-			request: new Request(sampleURL),
-			env: getEnv(),
-			ectx: new ExecutionContextMock(),
-		});
-		ctx.env.ROTATION_CRON_STRING = '0 0 1 * *'; // At 00:00 on day-of-month 1
-
-		const date = new Date('2023-08-02T12:00:00Z'); // 2nd August is not the 1st
-		expect(shouldRotateKey(date, ctx.env)).toBe(false);
-	});
-
-	it('should rotate key at 11:59 PM on the last day of the month', async () => {
-		const ctx = getContext({
-			request: new Request(sampleURL),
-			env: getEnv(),
-			ectx: new ExecutionContextMock(),
-		});
-		ctx.env.ROTATION_CRON_STRING = '59 23 * * *'; // At 23:59 on the last day of the month
-
-		const date = new Date('2023-08-31T23:59:00Z'); // 31st August 2023 is the last day of the month
-		expect(shouldRotateKey(date, ctx.env)).toBe(true);
-	});
-
-	it('should handle rotation with millisecond precision', async () => {
-		const ctx = getContext({
-			request: new Request(sampleURL),
-			env: getEnv(),
-			ectx: new ExecutionContextMock(),
-		});
-		ctx.env.ROTATION_CRON_STRING = '* * * * *';
-
-		const date = new Date('2023-08-01T00:01:00.010Z');
-		expect(shouldRotateKey(date, ctx.env)).toBe(true);
-	});
+			expect(shouldRotateKey(new Date(date), ctx.env)).toBe(expected);
+		}
+	);
 });
 
 describe('shouldClearKey Function', () => {
-	it('should not clear key when neither expiration time has passed', () => {
-		const keyUploadTime = new Date('2023-10-01T12:00:00Z');
-		const now = new Date('2023-10-02T11:59:59Z');
-		const effectivePrevTime = new Date('2023-09-30T00:00:00Z').getTime();
+	it.concurrent.each`
+	name                                                                                        | keyUpload                 | now                       | effectivePrev             | expected
+	${'not clear key when neither expiration time has passed'}                                  | ${'2023-10-01T12:00:00Z'} | ${'2023-10-02T11:59:59Z'} | ${'2023-09-30T00:00:00Z'} | ${false}
+	${'not clear key when per-key expiration has passed but rotation-based expiration has not'} | ${'2023-09-29T12:00:00Z'} | ${'2023-10-01T12:00:01Z'} | ${'2023-10-03T00:00:00Z'} | ${false}
+	${'not clear key when rotation-based expiration has passed but per-key expiration has not'} | ${'2023-10-03T12:00:00Z'} | ${'2023-10-05T11:59:59Z'} | ${'2023-10-01T00:00:00Z'} | ${false}
+	${'clear key when both expiration times have passed'}                                       | ${'2023-09-29T12:00:00Z'} | ${'2023-10-05T12:00:01Z'} | ${'2023-09-30T00:00:00Z'} | ${true}
+	${'clear key when current time equals the maximum expiration time'}                         | ${'2023-10-01T12:00:00Z'} | ${'2023-10-03T12:00:00Z'} | ${'2023-10-01T12:00:00Z'} | ${true}
+	`(
+		'should $name',
+		({
+			keyUpload,
+			now,
+			effectivePrev,
+			expected,
+		}: {
+			keyUpload: string;
+			now: string;
+			effectivePrev: string;
+			expected: boolean;
+		}) => {
+			const keyUploadTime = new Date(keyUpload);
+			const nowTime = new Date(now);
+			const effectivePrevTime = new Date(effectivePrev).getTime();
 
-		const result = shouldClearKey(keyUploadTime, now, effectivePrevTime);
-		expect(result).toBe(false);
-	});
-
-	it('should not clear key when per-key expiration has passed but rotation-based expiration has not', () => {
-		const keyUploadTime = new Date('2023-09-29T12:00:00Z');
-		const now = new Date('2023-10-01T12:00:01Z');
-		const effectivePrevTime = new Date('2023-10-03T00:00:00Z').getTime();
-
-		const result = shouldClearKey(keyUploadTime, now, effectivePrevTime);
-		expect(result).toBe(false);
-	});
-
-	it('should not clear key when rotation-based expiration has passed but per-key expiration has not', () => {
-		const keyUploadTime = new Date('2023-10-03T12:00:00Z');
-		const now = new Date('2023-10-05T11:59:59Z');
-		const effectivePrevTime = new Date('2023-10-01T00:00:00Z').getTime();
-
-		const result = shouldClearKey(keyUploadTime, now, effectivePrevTime);
-		expect(result).toBe(false);
-	});
-
-	it('should clear key when both expiration times have passed', () => {
-		const keyUploadTime = new Date('2023-09-29T12:00:00Z');
-		const now = new Date('2023-10-05T12:00:01Z');
-		const effectivePrevTime = new Date('2023-09-30T00:00:00Z').getTime();
-
-		const result = shouldClearKey(keyUploadTime, now, effectivePrevTime);
-		expect(result).toBe(true);
-	});
-
-	it('should clear key when current time equals the maximum expiration time', () => {
-		const keyUploadTime = new Date('2023-10-01T12:00:00Z');
-		const now = new Date('2023-10-03T12:00:00Z');
-		const effectivePrevTime = new Date('2023-10-01T12:00:00Z').getTime();
-
-		const result = shouldClearKey(keyUploadTime, now, effectivePrevTime);
-		expect(result).toBe(true);
-	});
+			const result = shouldClearKey(keyUploadTime, nowTime, effectivePrevTime);
+			expect(result).toBe(expected);
+		}
+	);
 });
 
 describe('getPrevRotationTime Function', () => {
 	it('should return the maximum of prevTime and mostRecentKeyUploadTime when ROTATION_CRON_STRING is valid', () => {
 		const ctx = getContext({
-			request: new Request('https://example.com'),
+			request: new Request(sampleURL),
 			env: getEnv(),
 			ectx: new ExecutionContextMock(),
 		});
@@ -447,13 +383,14 @@ describe('getPrevRotationTime Function', () => {
 
 	it('should return mostRecentKeyUploadTime when ROTATION_CRON_STRING is not set', () => {
 		const ctx = getContext({
-			request: new Request('https://example.com'),
+			request: new Request(sampleURL),
 			env: getEnv(),
 			ectx: new ExecutionContextMock(),
 		});
 
-		ctx.env.ROTATION_CRON_STRING = undefined;
 		const mostRecentKeyUploadTime = new Date('2023-10-03T12:00:00Z');
+		ctx.env.ROTATION_CRON_STRING = undefined;
+
 		const expected = mostRecentKeyUploadTime.getTime();
 
 		const result = getPrevRotationTime(mostRecentKeyUploadTime, ctx);
