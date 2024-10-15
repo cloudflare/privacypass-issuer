@@ -102,26 +102,61 @@ export function shouldRevalidate(expirationDate: Date): boolean {
 	return Math.random() < probabilityThreshold;
 }
 
+// InMemoryCryptoKeyCache uses workers memory to cache CryptoKey without serialisation
+// Note it's up only until the worker is reloaded
+// There is no lifetime guarantee
+// dev: the use of ctx is to enable stale-while-revalidate like behaviour
+export class InMemoryCryptoKeyCache {
+	private static store: Map<string, CacheElement<CryptoKey>> = new Map();
+
+	constructor(private ctx: Context) {}
+
+	async read(
+		key: string,
+		setValFn: (key: string) => Promise<CacheElement<CryptoKey>>
+	): Promise<CryptoKey> {
+		const refreshCache = async () => {
+			const val = await setValFn(key);
+			InMemoryCryptoKeyCache.store.set(key, val);
+			return val.value;
+		};
+
+		const cachedValue = InMemoryCryptoKeyCache.store.get(key);
+		if (cachedValue) {
+			this.ctx.waitUntil(
+				(() => {
+					const expiration = new Date(cachedValue.expiration.getTime());
+					if (shouldRevalidate(expiration)) {
+						console.log('InMemoryCache is stale. Revalidating with waitUntil.');
+						return refreshCache();
+					}
+					return Promise.resolve();
+				})()
+			);
+			return cachedValue.value;
+		}
+		return refreshCache();
+	}
+}
+
 // InMemoryCache uses workers memory to cache item
 // Note it's up only until the worker is reloaded
 // There is no lifetime guarantee
 // dev: the use of ctx is to enable stale-while-revalidate like behaviour
 export class InMemoryCache implements ReadableCache {
-	private store: Map<string, CacheElement<string>>;
+	private static store: Map<string, CacheElement<string>> = new Map();
 
-	constructor(private ctx: Context) {
-		this.store = new Map();
-	}
+	constructor(private ctx: Context) {}
 
 	async read<T>(key: string, setValFn: (key: string) => Promise<CacheElement<T>>): Promise<T> {
 		const refreshCache = async () => {
 			const val = await setValFn(key);
 			const newCacheValue = { value: serialize(val.value), expiration: val.expiration };
-			this.store.set(key, newCacheValue);
+			InMemoryCache.store.set(key, newCacheValue);
 			return val.value;
 		};
 
-		const cachedValue = this.store.get(key);
+		const cachedValue = InMemoryCache.store.get(key);
 		if (cachedValue) {
 			this.ctx.waitUntil(
 				(() => {
