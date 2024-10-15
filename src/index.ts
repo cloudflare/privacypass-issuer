@@ -248,10 +248,6 @@ const handleClearKey = async (ctx: Context, _request?: Request) => {
 
 	const effectivePrevRotationTime = getPrevRotationTime(new Date(latestKey.uploaded), ctx);
 
-	if (effectivePrevRotationTime == null) {
-		return new Response('Failed to determine previous rotation time', { status: 500 });
-	}
-
 	const toDelete: Set<string> = new Set();
 
 	for (const key of keys.objects) {
