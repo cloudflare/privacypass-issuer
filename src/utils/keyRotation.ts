@@ -9,7 +9,7 @@ interface CronParseResult {
 	match: boolean;
 }
 
-const KEY_LIFESPAN = 48 * 60 * 60 * 1000;
+const KEY_LIFESPAN_IN_MS = 48 * 60 * 60 * 1000;
 
 export function getPrevRotationTime(mostRecentKeyUploadTime: Date, ctx: Context): number {
 	let effectivePrevTime: number;
@@ -34,8 +34,8 @@ export function shouldRotateKey(date: Date, env: Bindings): boolean {
 }
 
 export function shouldClearKey(keyUploadTime: Date, now: Date, effectivePrevTime: number): boolean {
-	const keyExpirationTime = keyUploadTime.getTime() + KEY_LIFESPAN;
-	const rotationBasedExpirationTime = effectivePrevTime + KEY_LIFESPAN;
+	const keyExpirationTime = keyUploadTime.getTime() + KEY_LIFESPAN_IN_MS;
+	const rotationBasedExpirationTime = effectivePrevTime + KEY_LIFESPAN_IN_MS;
 	return now.getTime() >= Math.max(keyExpirationTime, rotationBasedExpirationTime);
 }
 
