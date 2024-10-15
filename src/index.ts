@@ -102,7 +102,7 @@ export const handleTokenRequest = async (ctx: Context, request: Request) => {
 	const signedToken = await issuer.issue(tokenRequest);
 	ctx.metrics.signedTokenTotal.inc({ key_id: keyID });
 
-	console.log(`Token issued successfully for key ${keyID}`);
+	console.debug(`Token issued successfully for key ${keyID}`);
 
 	return new Response(signedToken.serialize(), {
 		headers: { 'content-type': MediaType.PRIVATE_TOKEN_RESPONSE },
