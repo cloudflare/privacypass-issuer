@@ -136,10 +136,3 @@ export class BadTokenKeyRequestedError extends HTTPError {
 		this.code = BadTokenKeyRequestedError.CODE;
 	}
 }
-
-export class PrevRotationTimeError extends Error {
-	constructor(message: string) {
-		super(message);
-		this.name = 'PrevRotationTimeError';
-	}
-}

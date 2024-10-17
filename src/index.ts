@@ -30,7 +30,7 @@ import {
 } from './cache';
 const { BlindRSAMode, Issuer, TokenRequest } = publicVerif;
 
-import { getPrevRotationTime, shouldRotateKey, shouldClearKey } from './utils/keyRotation';
+import { shouldRotateKey, shouldClearKey } from './utils/keyRotation';
 
 const keyToTokenKeyID = async (key: Uint8Array): Promise<number> => {
 	const hash = await crypto.subtle.digest('SHA-256', key);
@@ -250,9 +250,12 @@ export const handleRotateKey = async (ctx: Context, _request?: Request) => {
 	return new Response(`New key ${publicKeyEnc}`, { status: 201 });
 };
 
-const handleClearKey = async (ctx: Context, _request?: Request) => {
+export const handleClearKey = async (
+	ctx: Context,
+	_request?: Request,
+	now: Date = new Date(Date.now())
+) => {
 	ctx.metrics.keyClearTotal.inc();
-	const now = new Date();
 
 	const keys = await ctx.bucket.ISSUANCE_KEYS.list({ shouldUseCache: false });
 
@@ -260,37 +263,44 @@ const handleClearKey = async (ctx: Context, _request?: Request) => {
 		return new Response('No keys to clear', { status: 201 });
 	}
 
-	// iterating twice over keys, because we need to know the latest upload key time to enforce key clearance
-	// Find the latest key based on the upload time
-	let latestKey = keys.objects[0];
-	for (const key of keys.objects) {
-		if (new Date(key.uploaded).getTime() > new Date(latestKey.uploaded).getTime()) {
-			latestKey = key;
-		}
-	}
+	const lifespanInMs = ctx.env.KEY_LIFESPAN_IN_MS
+		? Number.parseInt(ctx.env.KEY_LIFESPAN_IN_MS)
+		: 48 * 60 * 60 * 1000; // defaults to 48 hours
 
-	const effectivePrevRotationTime = getPrevRotationTime(new Date(latestKey.uploaded), ctx);
+	const freshestKeyCount = ctx.env.MINIMUM_FRESHEST_KEYS
+		? Number.parseInt(ctx.env.MINIMUM_FRESHEST_KEYS)
+		: 1;
+
+	keys.objects.sort((a, b) => new Date(b.uploaded).getTime() - new Date(a.uploaded).getTime());
 
 	const toDelete: Set<string> = new Set();
 
-	for (const key of keys.objects) {
+	for (let i = 0; i < keys.objects.length; i++) {
+		const key = keys.objects[i];
 		const keyUploadTime = new Date(key.uploaded);
-		if (shouldClearKey(keyUploadTime, now, effectivePrevRotationTime)) {
+
+		const isFreshest = i < freshestKeyCount;
+
+		if (isFreshest) {
+			continue;
+		}
+
+		const shouldDelete = shouldClearKey(keyUploadTime, now, lifespanInMs);
+
+		if (shouldDelete) {
 			toDelete.add(key.key);
 		}
 	}
 
-	// Ensure the latest key is never deleted
-	toDelete.delete(latestKey.key);
-
-	if (toDelete.size === 0) {
-		return new Response('No keys to clear', { status: 201 });
-	}
-
 	const toDeleteArray = [...toDelete];
 
+	if (toDeleteArray.length > 0) {
+		console.log(`\nKeys cleared: ${toDeleteArray.join('\n')}`);
+	} else {
+		console.log('\nNo keys were cleared.');
+	}
+
 	await ctx.bucket.ISSUANCE_KEYS.delete(toDeleteArray);
-	console.log(`Keys cleared: ${toDeleteArray.join('\n')}`);
 	ctx.waitUntil(clearDirectoryCache(ctx));
 
 	return new Response(`Keys cleared: ${toDeleteArray.join('\n')}`, { status: 201 });
