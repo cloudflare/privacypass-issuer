@@ -1,7 +1,5 @@
 import { Bindings } from '../bindings';
 import cronParser from 'cron-parser';
-import { Context } from '../context';
-import { PrevRotationTimeError } from '../errors';
 
 interface CronParseResult {
 	prevTime?: number;
@@ -9,34 +7,14 @@ interface CronParseResult {
 	match: boolean;
 }
 
-const KEY_LIFESPAN_IN_MS = 48 * 60 * 60 * 1000;
-
-export function getPrevRotationTime(mostRecentKeyUploadTime: Date, ctx: Context): number {
-	let effectivePrevTime: number;
-	if (ctx.env.ROTATION_CRON_STRING) {
-		const { prevTime } = matchCronTime(ctx.env.ROTATION_CRON_STRING, mostRecentKeyUploadTime);
-
-		if (prevTime === undefined) {
-			console.error('Failed to determine previous rotation time for key');
-			throw new PrevRotationTimeError('Failed to determine previous rotation time');
-		}
-
-		effectivePrevTime = Math.max(prevTime, mostRecentKeyUploadTime.getTime());
-	} else {
-		effectivePrevTime = mostRecentKeyUploadTime.getTime();
-	}
-	return effectivePrevTime;
-}
-
 export function shouldRotateKey(date: Date, env: Bindings): boolean {
 	const utcDate = new Date(date.toISOString());
 	return env.ROTATION_CRON_STRING ? matchCronTime(env.ROTATION_CRON_STRING, utcDate).match : false;
 }
 
-export function shouldClearKey(keyUploadTime: Date, now: Date, effectivePrevTime: number): boolean {
-	const keyExpirationTime = keyUploadTime.getTime() + KEY_LIFESPAN_IN_MS;
-	const rotationBasedExpirationTime = effectivePrevTime + KEY_LIFESPAN_IN_MS;
-	return now.getTime() >= Math.max(keyExpirationTime, rotationBasedExpirationTime);
+export function shouldClearKey(keyUploadTime: Date, now: Date, lifespanInMs: number): boolean {
+	const keyExpirationTime = keyUploadTime.getTime() + lifespanInMs;
+	return now.getTime() > keyExpirationTime;
 }
 
 export function matchCronTime(cronString: string, date: Date): CronParseResult {
