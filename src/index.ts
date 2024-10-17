@@ -125,6 +125,8 @@ export const handleTokenRequest = async (ctx: Context, request: Request) => {
 	// once there is a way to filter logpush based on log level, we can consider re-enabling
 	// console.debug(`Token issued successfully for key ${keyID}`);
 
+	console.log(`Token issued successfully using key ID: ${keyID}`);
+
 	return new Response(signedToken.serialize(), {
 		headers: { 'content-type': MediaType.PRIVATE_TOKEN_RESPONSE },
 	});
