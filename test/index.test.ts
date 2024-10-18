@@ -11,7 +11,7 @@ import {
 	ExecutionContextMock,
 	MockCache,
 	mockDateNow,
-	resetDateMocks,
+	clearDateMocks,
 	getContext,
 	getEnv,
 } from './mocks';
@@ -344,17 +344,19 @@ describe('shouldClearKey Function', () => {
 			expected: boolean;
 		}) => {
 			const keyUploadTime = new Date(keyUpload);
-			const nowTime = new Date(now);
 
-			const result = shouldClearKey(keyUploadTime, nowTime, lifespanInMs);
+			mockDateNow(now);
+			const result = shouldClearKey(keyUploadTime, lifespanInMs);
 			expect(result).toBe(expected);
+
+			clearDateMocks();
 		}
 	);
 });
 
 describe('Integration Test for Key Clearing with Mocked Date', () => {
 	afterEach(() => {
-		resetDateMocks();
+		clearDateMocks();
 	});
 
 	it.each`
@@ -390,20 +392,24 @@ describe('Integration Test for Key Clearing with Mocked Date', () => {
 			await ctx.env.ISSUANCE_KEYS.put('key1', 'dummy-private-key-data', {
 				customMetadata: { publicKey: 'dummy-public-key-data' },
 			});
+			clearDateMocks();
 
 			mockDateNow(new Date(keyUpload2).getTime());
 			await ctx.env.ISSUANCE_KEYS.put('key2', 'dummy-private-key-data', {
 				customMetadata: { publicKey: 'dummy-public-key-data' },
 			});
+			clearDateMocks();
 
 			mockDateNow(new Date(keyUpload3).getTime());
 			await ctx.env.ISSUANCE_KEYS.put('key3', 'dummy-private-key-data', {
 				customMetadata: { publicKey: 'dummy-public-key-data' },
 			});
+			clearDateMocks();
 
 			// Mock the time for clearing operation
-			const fixedClearTime = new Date(clearTime);
-			await handleClearKey(ctx, undefined, fixedClearTime);
+			mockDateNow(clearTime);
+			await handleClearKey(ctx, undefined);
+			clearDateMocks();
 
 			// Check the remaining keys after clear operation
 			const remainingKeys = await ctx.env.ISSUANCE_KEYS.list();
@@ -418,8 +424,6 @@ describe('Integration Test for Key Clearing with Mocked Date', () => {
 					expect(remainingKeyIds).not.toContain(remainingKey);
 				}
 			}
-
-			resetDateMocks();
 		}
 	);
 });

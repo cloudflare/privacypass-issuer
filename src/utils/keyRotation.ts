@@ -12,9 +12,9 @@ export function shouldRotateKey(date: Date, env: Bindings): boolean {
 	return env.ROTATION_CRON_STRING ? matchCronTime(env.ROTATION_CRON_STRING, utcDate).match : false;
 }
 
-export function shouldClearKey(keyUploadTime: Date, now: Date, lifespanInMs: number): boolean {
+export function shouldClearKey(keyUploadTime: Date, lifespanInMs: number): boolean {
 	const keyExpirationTime = keyUploadTime.getTime() + lifespanInMs;
-	return now.getTime() > keyExpirationTime;
+	return Date.now() > keyExpirationTime;
 }
 
 export function matchCronTime(cronString: string, date: Date): CronParseResult {

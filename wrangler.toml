@@ -4,7 +4,7 @@ workers_dev = false # Enable it for development purposes, and if you are want a 
 account_id = "your-account-id-here" # Log in dash.cloudflare.com, select an account, go to Workers, and copy Account ID
 
 [build]
-command = 'npm install && npm run build'
+command = "npm install && npm run build"
 
 [env.production]
 name = "pp-issuer-production"
@@ -16,9 +16,11 @@ crons = ["0 0 * * *"]
 [env.production.vars]
 DIRECTORY_CACHE_MAX_AGE_SECONDS = "86400"
 ENVIRONMENT = "production"
+KEY_LIFESPAN_IN_MS = "172800000" # 48h
+MINIMUM_FRESHEST_KEYS = "1"
+ROTATION_CRON_STRING = "30 12 * * *"
 SENTRY_SAMPLE_RATE = "0" # Between 0-1 if you log errors on Sentry. 0 disables Sentry logging. Configuration is done through Workers Secrets
 SERVICE = "pp-issuer-production"
-ROTATION_CRON_STRING = '30 12 * * *'
 
 [[env.production.r2_buckets]]
 bucket_name = 'pp-issuer-keys-production' # wrangler r2 bucket create pp-issuer-keys-production. Pricing and free tier described on https://developers.cloudflare.com/r2/pricing

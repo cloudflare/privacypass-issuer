@@ -65,23 +65,24 @@ export const getContext = (options: MockContextOptions): Context => {
 	return new Context(options.request, options.env, waitUntilFunc, logger, metrics);
 };
 
-let originalDateNow = Date.now;
-let originalDateConstructor = Date;
+const originalDateNow = Date.now;
+const originalDateConstructor = Date;
 
-export const mockDateNow = (fixedTime: number): void => {
+export const mockDateNow = (...fixedTimeArg: ConstructorParameters<typeof Date>): void => {
+	const fixedTime = new originalDateConstructor(...fixedTimeArg).getTime();
 	global.Date.now = jest.fn(() => fixedTime);
 	global.Date = class extends Date {
-		constructor(...args: any[]) {
+		constructor(...args: unknown[]) {
 			if (args.length === 0) {
 				super(fixedTime);
 			} else {
-				super(...(args as [any]));
+				super(...(args as ConstructorParameters<typeof Date>));
 			}
 		}
-	} as any;
+	} as typeof Date;
 };
 
-export const resetDateMocks = (): void => {
+export const clearDateMocks = (): void => {
 	global.Date.now = originalDateNow;
 	global.Date = originalDateConstructor;
 };

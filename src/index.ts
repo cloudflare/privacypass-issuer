@@ -250,11 +250,7 @@ export const handleRotateKey = async (ctx: Context, _request?: Request) => {
 	return new Response(`New key ${publicKeyEnc}`, { status: 201 });
 };
 
-export const handleClearKey = async (
-	ctx: Context,
-	_request?: Request,
-	now: Date = new Date(Date.now())
-) => {
+export const handleClearKey = async (ctx: Context, _request?: Request) => {
 	ctx.metrics.keyClearTotal.inc();
 
 	const keys = await ctx.bucket.ISSUANCE_KEYS.list({ shouldUseCache: false });
@@ -263,13 +259,8 @@ export const handleClearKey = async (
 		return new Response('No keys to clear', { status: 201 });
 	}
 
-	const lifespanInMs = ctx.env.KEY_LIFESPAN_IN_MS
-		? Number.parseInt(ctx.env.KEY_LIFESPAN_IN_MS)
-		: 48 * 60 * 60 * 1000; // defaults to 48 hours
-
-	const freshestKeyCount = ctx.env.MINIMUM_FRESHEST_KEYS
-		? Number.parseInt(ctx.env.MINIMUM_FRESHEST_KEYS)
-		: 1;
+	const lifespanInMs = Number.parseInt(ctx.env.KEY_LIFESPAN_IN_MS);
+	const freshestKeyCount = Number.parseInt(ctx.env.MINIMUM_FRESHEST_KEYS);
 
 	keys.objects.sort((a, b) => new Date(b.uploaded).getTime() - new Date(a.uploaded).getTime());
 
@@ -285,7 +276,7 @@ export const handleClearKey = async (
 			continue;
 		}
 
-		const shouldDelete = shouldClearKey(keyUploadTime, now, lifespanInMs);
+		const shouldDelete = shouldClearKey(keyUploadTime, lifespanInMs);
 
 		if (shouldDelete) {
 			toDelete.add(key.key);
