@@ -360,11 +360,13 @@ describe('Integration Test for Key Clearing with Mocked Date', () => {
 	});
 
 	it.each`
-		name                                                         | keyUpload1                | keyUpload2                | keyUpload3                | clearTime                 | expectedRemainingKeys
-		${'should clear expired key and preserve freshest keys'}     | ${'2024-10-01T14:59:59Z'} | ${'2024-09-30T11:00:00Z'} | ${'2024-10-03T13:00:00Z'} | ${'2024-10-03T14:00:00Z'} | ${['key1', 'key3']}
-		${'should preserve all keys when within lifespan'}           | ${'2024-10-01T14:00:00Z'} | ${'2024-10-02T10:00:00Z'} | ${'2024-10-03T12:00:00Z'} | ${'2024-10-03T14:00:00Z'} | ${['key1', 'key2', 'key3']}
-		${'should clear only the oldest key that exceeded lifespan'} | ${'2024-09-28T11:00:00Z'} | ${'2024-10-01T15:00:00Z'} | ${'2024-10-03T13:00:00Z'} | ${'2024-10-03T14:00:00Z'} | ${['key2', 'key3']}
-		${'should leave only the freshest key remaining'}            | ${'2024-09-28T10:00:00Z'} | ${'2024-09-29T10:00:00Z'} | ${'2024-10-02T14:00:00Z'} | ${'2024-10-03T14:00:00Z'} | ${['key3']}
+		name                                                                  | keyUpload1                | keyUpload2                | keyUpload3                | clearTime                 | keyLifespanInMs            | minimumNumberOfKeys | expectedRemainingKeys
+		${'should clear expired key and preserve freshest keys'}              | ${'2024-10-01T14:59:59Z'} | ${'2024-09-30T11:00:00Z'} | ${'2024-10-03T13:00:00Z'} | ${'2024-10-03T14:00:00Z'} | ${2 * 24 * 60 * 60 * 1000} | ${1}                | ${['key1', 'key3']}
+		${'should preserve all keys when within lifespan'}                    | ${'2024-10-01T14:00:00Z'} | ${'2024-10-02T10:00:00Z'} | ${'2024-10-03T12:00:00Z'} | ${'2024-10-03T14:00:00Z'} | ${2 * 24 * 60 * 60 * 1000} | ${1}                | ${['key1', 'key2', 'key3']}
+		${'should clear only the oldest key that exceeded lifespan'}          | ${'2024-09-28T11:00:00Z'} | ${'2024-10-01T15:00:00Z'} | ${'2024-10-03T13:00:00Z'} | ${'2024-10-03T14:00:00Z'} | ${2 * 24 * 60 * 60 * 1000} | ${1}                | ${['key2', 'key3']}
+		${'should leave only the freshest key remaining'}                     | ${'2024-09-28T10:00:00Z'} | ${'2024-09-29T10:00:00Z'} | ${'2024-10-02T14:00:00Z'} | ${'2024-10-03T14:00:00Z'} | ${2 * 24 * 60 * 60 * 1000} | ${1}                | ${['key3']}
+		${'should keep all keys when minimum freshest is three'}              | ${'2024-09-28T10:00:00Z'} | ${'2024-09-29T10:00:00Z'} | ${'2024-10-02T14:00:00Z'} | ${'2024-10-03T14:00:00Z'} | ${2 * 24 * 60 * 60 * 1000} | ${3}                | ${['key1', 'key2', 'key3']}
+		${'should leave only the freshest key remaining with 1 day rotation'} | ${'2024-10-01T14:00:00Z'} | ${'2024-10-02T10:00:00Z'} | ${'2024-10-03T12:00:00Z'} | ${'2024-10-03T14:00:00Z'} | ${1 * 24 * 60 * 60 * 1000} | ${1}                | ${['key3']}
 	`(
 		'$name',
 		async ({
@@ -372,6 +374,8 @@ describe('Integration Test for Key Clearing with Mocked Date', () => {
 			keyUpload2,
 			keyUpload3,
 			clearTime,
+			keyLifespanInMs,
+			minimumNumberOfKeys,
 			expectedRemainingKeys,
 		}: {
 			name: string;
@@ -379,11 +383,16 @@ describe('Integration Test for Key Clearing with Mocked Date', () => {
 			keyUpload2: string;
 			keyUpload3: string;
 			clearTime: string;
+			keyLifespanInMs: number;
+			minimumNumberOfKeys: number;
 			expectedRemainingKeys: string[];
 		}) => {
+			const env = getEnv();
+			env.KEY_LIFESPAN_IN_MS = keyLifespanInMs.toFixed();
+			env.MINIMUM_FRESHEST_KEYS = minimumNumberOfKeys.toFixed();
 			const ctx = getContext({
 				request: new Request(sampleURL),
-				env: getEnv(),
+				env,
 				ectx: new ExecutionContextMock(),
 			});
 
@@ -414,6 +423,8 @@ describe('Integration Test for Key Clearing with Mocked Date', () => {
 			// Check the remaining keys after clear operation
 			const remainingKeys = await ctx.env.ISSUANCE_KEYS.list();
 			const remainingKeyIds = remainingKeys.objects.map(k => k.key);
+
+			expect(remainingKeyIds.length).toBeGreaterThanOrEqual(minimumNumberOfKeys);
 
 			// Verify that only the expected keys remain
 			for (const expectedKey of expectedRemainingKeys) {
