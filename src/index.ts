@@ -165,9 +165,11 @@ export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 		throw new Error('Issuer not initialised');
 	}
 
-	const keys = keyList.objects.sort(
-		(a, b) => new Date(b.uploaded).getTime() - new Date(a.uploaded).getTime()
-	);
+	// there is no reason for an auditor to continue serving keys beyond the minimum requirement
+	const freshestKeyCount = Number.parseInt(ctx.env.MINIMUM_FRESHEST_KEYS);
+	const keys = keyList.objects
+		.sort((a, b) => new Date(b.uploaded).getTime() - new Date(a.uploaded).getTime())
+		.slice(0, freshestKeyCount);
 
 	const directory: IssuerConfigurationResponse = {
 		'issuer-request-uri': '/token-request',

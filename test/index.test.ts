@@ -125,15 +125,13 @@ describe('rotate and clear key', () => {
 		const directoryRequest = new Request(directoryURL);
 
 		const NUMBER_OF_KEYS_GENERATED = 3;
+		const env = getEnv();
+		env.MINIMUM_FRESHEST_KEYS = NUMBER_OF_KEYS_GENERATED.toFixed();
 		for (let i = 0; i < NUMBER_OF_KEYS_GENERATED; i += 1) {
-			await workerObject.fetch(rotateRequest, getEnv(), new ExecutionContextMock());
+			await workerObject.fetch(rotateRequest, env, new ExecutionContextMock());
 		}
 
-		const response = await workerObject.fetch(
-			directoryRequest,
-			getEnv(),
-			new ExecutionContextMock()
-		);
+		const response = await workerObject.fetch(directoryRequest, env, new ExecutionContextMock());
 		expect(response.ok).toBe(true);
 
 		const directory: IssuerConfigurationResponse = await response.json();
@@ -146,14 +144,16 @@ describe('rotate and clear key', () => {
 		const directoryRequest = new Request(directoryURL);
 
 		const NUMBER_OF_KEYS_GENERATED = 3;
+		const env = getEnv();
+		env.MINIMUM_FRESHEST_KEYS = NUMBER_OF_KEYS_GENERATED.toFixed();
 
 		for (let i = 0; i < NUMBER_OF_KEYS_GENERATED; i += 1) {
-			await workerObject.fetch(rotateRequest, getEnv(), new ExecutionContextMock());
+			await workerObject.fetch(rotateRequest, env, new ExecutionContextMock());
 		}
 
-		await workerObject.fetch(clearRequest, getEnv(), new ExecutionContextMock());
+		await workerObject.fetch(clearRequest, env, new ExecutionContextMock());
 
-		let response = await workerObject.fetch(directoryRequest, getEnv(), new ExecutionContextMock());
+		let response = await workerObject.fetch(directoryRequest, env, new ExecutionContextMock());
 		expect(response.ok).toBe(true);
 
 		let directory: IssuerConfigurationResponse = await response.json();
@@ -161,8 +161,8 @@ describe('rotate and clear key', () => {
 		// All keys should still be present since the TTL has not expired
 		expect(directory['token-keys']).toHaveLength(NUMBER_OF_KEYS_GENERATED);
 
-		await workerObject.fetch(clearRequest, getEnv(), new ExecutionContextMock());
-		response = await workerObject.fetch(directoryRequest, getEnv(), new ExecutionContextMock());
+		await workerObject.fetch(clearRequest, env, new ExecutionContextMock());
+		response = await workerObject.fetch(directoryRequest, env, new ExecutionContextMock());
 		expect(response.ok).toBe(true);
 
 		directory = await response.json();
@@ -178,9 +178,11 @@ describe('directory', () => {
 
 	const initializeKeys = async (numberOfKeys = 1): Promise<void> => {
 		const rotateRequest = new Request(rotateURL, { method: 'POST' });
+		const env = getEnv();
+		env.MINIMUM_FRESHEST_KEYS = numberOfKeys.toFixed();
 
 		for (let i = 0; i < numberOfKeys; i += 1) {
-			await workerObject.fetch(rotateRequest, getEnv(), new ExecutionContextMock());
+			await workerObject.fetch(rotateRequest, env, new ExecutionContextMock());
 		}
 	};
 
@@ -192,13 +194,11 @@ describe('directory', () => {
 		const directoryRequest = new Request(directoryURL);
 
 		const NUMBER_OF_KEYS_GENERATED = 32; // arbitrary number, but good enough to confirm the ordering is working
+		const env = getEnv();
+		env.MINIMUM_FRESHEST_KEYS = NUMBER_OF_KEYS_GENERATED.toFixed();
 		await initializeKeys(NUMBER_OF_KEYS_GENERATED);
 
-		const response = await workerObject.fetch(
-			directoryRequest,
-			getEnv(),
-			new ExecutionContextMock()
-		);
+		const response = await workerObject.fetch(directoryRequest, env, new ExecutionContextMock());
 		expect(response.ok).toBe(true);
 
 		const directory = (await response.json()) as IssuerConfig;
@@ -355,6 +355,8 @@ describe('shouldClearKey Function', () => {
 });
 
 describe('Integration Test for Key Clearing with Mocked Date', () => {
+	const directoryURL = `${sampleURL}${PRIVATE_TOKEN_ISSUER_DIRECTORY}`;
+
 	afterEach(() => {
 		clearDateMocks();
 	});
@@ -435,6 +437,15 @@ describe('Integration Test for Key Clearing with Mocked Date', () => {
 					expect(remainingKeyIds).not.toContain(remainingKey);
 				}
 			}
+
+			const directoryRequest = new Request(directoryURL);
+
+			const response = await workerObject.fetch(directoryRequest, env, new ExecutionContextMock());
+			expect(response.ok).toBe(true);
+
+			const directory = (await response.json()) as IssuerConfig;
+
+			expect(directory['token-keys']).toHaveLength(minimumNumberOfKeys);
 		}
 	);
 });
