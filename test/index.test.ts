@@ -4,10 +4,17 @@
 import { jest } from '@jest/globals';
 
 import { Context } from '../src/context';
-import { handleTokenRequest, default as workerObject } from '../src/index';
+import { handleTokenRequest, handleClearKey, default as workerObject } from '../src/index';
 import { IssuerConfigurationResponse } from '../src/types';
 import { b64ToB64URL, u8ToB64 } from '../src/utils/base64';
-import { ExecutionContextMock, MockCache, getContext, getEnv } from './mocks';
+import {
+	ExecutionContextMock,
+	MockCache,
+	mockDateNow,
+	clearDateMocks,
+	getContext,
+	getEnv,
+} from './mocks';
 import { RSABSSA } from '@cloudflare/blindrsa-ts';
 import {
 	IssuerConfig,
@@ -17,25 +24,8 @@ import {
 	util,
 } from '@cloudflare/privacypass-ts';
 import { getDirectoryCache } from '../src/cache';
-import {
-	shouldRotateKey,
-	shouldClearKey,
-	matchCronTime,
-	getPrevRotationTime,
-} from '../src/utils/keyRotation';
+import { shouldRotateKey, shouldClearKey } from '../src/utils/keyRotation';
 const { TokenRequest } = publicVerif;
-
-import * as keyRotation from '../src/utils/keyRotation';
-
-// Mock the entire module and ensure matchCronTime is mocked
-jest.mock('../src/utils/keyRotation', () => {
-	const originalModule = jest.requireActual<typeof keyRotation>('../src/utils/keyRotation');
-	return {
-		__esModule: true, // Important for ESModules
-		...originalModule,
-		matchCronTime: jest.fn(), // mock matchCronTime
-	};
-});
 
 const sampleURL = 'http://localhost';
 
@@ -135,15 +125,13 @@ describe('rotate and clear key', () => {
 		const directoryRequest = new Request(directoryURL);
 
 		const NUMBER_OF_KEYS_GENERATED = 3;
+		const env = getEnv();
+		env.MINIMUM_FRESHEST_KEYS = NUMBER_OF_KEYS_GENERATED.toFixed();
 		for (let i = 0; i < NUMBER_OF_KEYS_GENERATED; i += 1) {
-			await workerObject.fetch(rotateRequest, getEnv(), new ExecutionContextMock());
+			await workerObject.fetch(rotateRequest, env, new ExecutionContextMock());
 		}
 
-		const response = await workerObject.fetch(
-			directoryRequest,
-			getEnv(),
-			new ExecutionContextMock()
-		);
+		const response = await workerObject.fetch(directoryRequest, env, new ExecutionContextMock());
 		expect(response.ok).toBe(true);
 
 		const directory: IssuerConfigurationResponse = await response.json();
@@ -156,14 +144,16 @@ describe('rotate and clear key', () => {
 		const directoryRequest = new Request(directoryURL);
 
 		const NUMBER_OF_KEYS_GENERATED = 3;
+		const env = getEnv();
+		env.MINIMUM_FRESHEST_KEYS = NUMBER_OF_KEYS_GENERATED.toFixed();
 
 		for (let i = 0; i < NUMBER_OF_KEYS_GENERATED; i += 1) {
-			await workerObject.fetch(rotateRequest, getEnv(), new ExecutionContextMock());
+			await workerObject.fetch(rotateRequest, env, new ExecutionContextMock());
 		}
 
-		await workerObject.fetch(clearRequest, getEnv(), new ExecutionContextMock());
+		await workerObject.fetch(clearRequest, env, new ExecutionContextMock());
 
-		let response = await workerObject.fetch(directoryRequest, getEnv(), new ExecutionContextMock());
+		let response = await workerObject.fetch(directoryRequest, env, new ExecutionContextMock());
 		expect(response.ok).toBe(true);
 
 		let directory: IssuerConfigurationResponse = await response.json();
@@ -171,8 +161,8 @@ describe('rotate and clear key', () => {
 		// All keys should still be present since the TTL has not expired
 		expect(directory['token-keys']).toHaveLength(NUMBER_OF_KEYS_GENERATED);
 
-		await workerObject.fetch(clearRequest, getEnv(), new ExecutionContextMock());
-		response = await workerObject.fetch(directoryRequest, getEnv(), new ExecutionContextMock());
+		await workerObject.fetch(clearRequest, env, new ExecutionContextMock());
+		response = await workerObject.fetch(directoryRequest, env, new ExecutionContextMock());
 		expect(response.ok).toBe(true);
 
 		directory = await response.json();
@@ -188,9 +178,11 @@ describe('directory', () => {
 
 	const initializeKeys = async (numberOfKeys = 1): Promise<void> => {
 		const rotateRequest = new Request(rotateURL, { method: 'POST' });
+		const env = getEnv();
+		env.MINIMUM_FRESHEST_KEYS = numberOfKeys.toFixed();
 
 		for (let i = 0; i < numberOfKeys; i += 1) {
-			await workerObject.fetch(rotateRequest, getEnv(), new ExecutionContextMock());
+			await workerObject.fetch(rotateRequest, env, new ExecutionContextMock());
 		}
 	};
 
@@ -202,13 +194,11 @@ describe('directory', () => {
 		const directoryRequest = new Request(directoryURL);
 
 		const NUMBER_OF_KEYS_GENERATED = 32; // arbitrary number, but good enough to confirm the ordering is working
+		const env = getEnv();
+		env.MINIMUM_FRESHEST_KEYS = NUMBER_OF_KEYS_GENERATED.toFixed();
 		await initializeKeys(NUMBER_OF_KEYS_GENERATED);
 
-		const response = await workerObject.fetch(
-			directoryRequest,
-			getEnv(),
-			new ExecutionContextMock()
-		);
+		const response = await workerObject.fetch(directoryRequest, env, new ExecutionContextMock());
 		expect(response.ok).toBe(true);
 
 		const directory = (await response.json()) as IssuerConfig;
@@ -333,67 +323,129 @@ describe('key rotation', () => {
 });
 
 describe('shouldClearKey Function', () => {
-	it.concurrent.each`
-	name                                                                                        | keyUpload                 | now                       | effectivePrev             | expected
-	${'not clear key when neither expiration time has passed'}                                  | ${'2023-10-01T12:00:00Z'} | ${'2023-10-02T11:59:59Z'} | ${'2023-09-30T00:00:00Z'} | ${false}
-	${'not clear key when per-key expiration has passed but rotation-based expiration has not'} | ${'2023-09-29T12:00:00Z'} | ${'2023-10-01T12:00:01Z'} | ${'2023-10-03T00:00:00Z'} | ${false}
-	${'not clear key when rotation-based expiration has passed but per-key expiration has not'} | ${'2023-10-03T12:00:00Z'} | ${'2023-10-05T11:59:59Z'} | ${'2023-10-01T00:00:00Z'} | ${false}
-	${'clear key when both expiration times have passed'}                                       | ${'2023-09-29T12:00:00Z'} | ${'2023-10-05T12:00:01Z'} | ${'2023-09-30T00:00:00Z'} | ${true}
-	${'clear key when current time equals the maximum expiration time'}                         | ${'2023-10-01T12:00:00Z'} | ${'2023-10-03T12:00:00Z'} | ${'2023-10-01T12:00:00Z'} | ${true}
+	it.each`
+		name                                                                     | keyUpload                 | now                           | lifespanInMs           | expected
+		${'not clear key when within the lifespan'}                              | ${'2023-10-01T12:00:00Z'} | ${'2023-10-02T11:59:59Z'}     | ${48 * 60 * 60 * 1000} | ${false}
+		${'clear key when it exceeds the lifespan'}                              | ${'2023-10-01T12:00:00Z'} | ${'2023-10-03T12:00:00.001Z'} | ${48 * 60 * 60 * 1000} | ${true}
+		${'clear key when it exceeds the lifespan even if close to the edge'}    | ${'2023-10-01T12:00:00Z'} | ${'2023-10-03T12:00:00.001Z'} | ${48 * 60 * 60 * 1000} | ${true}
+		${'not clear key within custom shorter lifespan if within that period'}  | ${'2023-10-01T12:00:00Z'} | ${'2023-10-01T13:00:00Z'}     | ${1 * 60 * 60 * 1000}  | ${false}
+		${'clear key based on custom shorter lifespan if the period has passed'} | ${'2023-10-01T12:00:00Z'} | ${'2023-10-01T13:00:01Z'}     | ${1 * 60 * 60 * 1000}  | ${true}
 	`(
 		'should $name',
 		({
 			keyUpload,
 			now,
-			effectivePrev,
+			lifespanInMs,
 			expected,
 		}: {
 			keyUpload: string;
 			now: string;
-			effectivePrev: string;
+			lifespanInMs: number;
 			expected: boolean;
 		}) => {
 			const keyUploadTime = new Date(keyUpload);
-			const nowTime = new Date(now);
-			const effectivePrevTime = new Date(effectivePrev).getTime();
 
-			const result = shouldClearKey(keyUploadTime, nowTime, effectivePrevTime);
+			mockDateNow(now);
+			const result = shouldClearKey(keyUploadTime, lifespanInMs);
 			expect(result).toBe(expected);
+
+			clearDateMocks();
 		}
 	);
 });
 
-describe('getPrevRotationTime Function', () => {
-	it('should return the maximum of prevTime and mostRecentKeyUploadTime when ROTATION_CRON_STRING is valid', () => {
-		const ctx = getContext({
-			request: new Request(sampleURL),
-			env: getEnv(),
-			ectx: new ExecutionContextMock(),
-		});
+describe('Integration Test for Key Clearing with Mocked Date', () => {
+	const directoryURL = `${sampleURL}${PRIVATE_TOKEN_ISSUER_DIRECTORY}`;
 
-		const mostRecentKeyUploadTime = new Date('2023-10-03T12:00:00Z');
-		ctx.env.ROTATION_CRON_STRING = '* * * * *';
-
-		const expectedPrevTime = new Date('2023-10-03T00:00:00Z').getTime();
-		const expected = Math.max(expectedPrevTime, mostRecentKeyUploadTime.getTime());
-
-		const result = getPrevRotationTime(mostRecentKeyUploadTime, ctx);
-		expect(result).toBe(expected);
+	afterEach(() => {
+		clearDateMocks();
 	});
 
-	it('should return mostRecentKeyUploadTime when ROTATION_CRON_STRING is not set', () => {
-		const ctx = getContext({
-			request: new Request(sampleURL),
-			env: getEnv(),
-			ectx: new ExecutionContextMock(),
-		});
+	it.each`
+		name                                                                  | keyUpload1                | keyUpload2                | keyUpload3                | clearTime                 | keyLifespanInMs            | minimumNumberOfKeys | expectedRemainingKeys
+		${'should clear expired key and preserve freshest keys'}              | ${'2024-10-01T14:59:59Z'} | ${'2024-09-30T11:00:00Z'} | ${'2024-10-03T13:00:00Z'} | ${'2024-10-03T14:00:00Z'} | ${2 * 24 * 60 * 60 * 1000} | ${1}                | ${['key1', 'key3']}
+		${'should preserve all keys when within lifespan'}                    | ${'2024-10-01T14:00:00Z'} | ${'2024-10-02T10:00:00Z'} | ${'2024-10-03T12:00:00Z'} | ${'2024-10-03T14:00:00Z'} | ${2 * 24 * 60 * 60 * 1000} | ${1}                | ${['key1', 'key2', 'key3']}
+		${'should clear only the oldest key that exceeded lifespan'}          | ${'2024-09-28T11:00:00Z'} | ${'2024-10-01T15:00:00Z'} | ${'2024-10-03T13:00:00Z'} | ${'2024-10-03T14:00:00Z'} | ${2 * 24 * 60 * 60 * 1000} | ${1}                | ${['key2', 'key3']}
+		${'should leave only the freshest key remaining'}                     | ${'2024-09-28T10:00:00Z'} | ${'2024-09-29T10:00:00Z'} | ${'2024-10-02T14:00:00Z'} | ${'2024-10-03T14:00:00Z'} | ${2 * 24 * 60 * 60 * 1000} | ${1}                | ${['key3']}
+		${'should keep all keys when minimum freshest is three'}              | ${'2024-09-28T10:00:00Z'} | ${'2024-09-29T10:00:00Z'} | ${'2024-10-02T14:00:00Z'} | ${'2024-10-03T14:00:00Z'} | ${2 * 24 * 60 * 60 * 1000} | ${3}                | ${['key1', 'key2', 'key3']}
+		${'should leave only the freshest key remaining with 1 day rotation'} | ${'2024-10-01T14:00:00Z'} | ${'2024-10-02T10:00:00Z'} | ${'2024-10-03T12:00:00Z'} | ${'2024-10-03T14:00:00Z'} | ${1 * 24 * 60 * 60 * 1000} | ${1}                | ${['key3']}
+	`(
+		'$name',
+		async ({
+			keyUpload1,
+			keyUpload2,
+			keyUpload3,
+			clearTime,
+			keyLifespanInMs,
+			minimumNumberOfKeys,
+			expectedRemainingKeys,
+		}: {
+			name: string;
+			keyUpload1: string;
+			keyUpload2: string;
+			keyUpload3: string;
+			clearTime: string;
+			keyLifespanInMs: number;
+			minimumNumberOfKeys: number;
+			expectedRemainingKeys: string[];
+		}) => {
+			const env = getEnv();
+			env.KEY_LIFESPAN_IN_MS = keyLifespanInMs.toFixed();
+			env.MINIMUM_FRESHEST_KEYS = minimumNumberOfKeys.toFixed();
+			const ctx = getContext({
+				request: new Request(sampleURL),
+				env,
+				ectx: new ExecutionContextMock(),
+			});
 
-		const mostRecentKeyUploadTime = new Date('2023-10-03T12:00:00Z');
-		ctx.env.ROTATION_CRON_STRING = undefined;
+			// Mock and add the keys based on the provided timestamps
+			mockDateNow(new Date(keyUpload1).getTime());
+			await ctx.env.ISSUANCE_KEYS.put('key1', 'dummy-private-key-data', {
+				customMetadata: { publicKey: 'dummy-public-key-data' },
+			});
+			clearDateMocks();
 
-		const expected = mostRecentKeyUploadTime.getTime();
+			mockDateNow(new Date(keyUpload2).getTime());
+			await ctx.env.ISSUANCE_KEYS.put('key2', 'dummy-private-key-data', {
+				customMetadata: { publicKey: 'dummy-public-key-data' },
+			});
+			clearDateMocks();
 
-		const result = getPrevRotationTime(mostRecentKeyUploadTime, ctx);
-		expect(result).toBe(expected);
-	});
+			mockDateNow(new Date(keyUpload3).getTime());
+			await ctx.env.ISSUANCE_KEYS.put('key3', 'dummy-private-key-data', {
+				customMetadata: { publicKey: 'dummy-public-key-data' },
+			});
+			clearDateMocks();
+
+			// Mock the time for clearing operation
+			mockDateNow(clearTime);
+			await handleClearKey(ctx, undefined);
+			clearDateMocks();
+
+			// Check the remaining keys after clear operation
+			const remainingKeys = await ctx.env.ISSUANCE_KEYS.list();
+			const remainingKeyIds = remainingKeys.objects.map(k => k.key);
+
+			expect(remainingKeyIds.length).toBeGreaterThanOrEqual(minimumNumberOfKeys);
+
+			// Verify that only the expected keys remain
+			for (const expectedKey of expectedRemainingKeys) {
+				expect(remainingKeyIds).toContain(expectedKey);
+			}
+			for (const remainingKey of remainingKeyIds) {
+				if (!expectedRemainingKeys.includes(remainingKey)) {
+					expect(remainingKeyIds).not.toContain(remainingKey);
+				}
+			}
+
+			const directoryRequest = new Request(directoryURL);
+
+			const response = await workerObject.fetch(directoryRequest, env, new ExecutionContextMock());
+			expect(response.ok).toBe(true);
+
+			const directory = (await response.json()) as IssuerConfig;
+
+			expect(directory['token-keys']).toHaveLength(minimumNumberOfKeys);
+		}
+	);
 });

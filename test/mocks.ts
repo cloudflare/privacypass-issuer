@@ -5,6 +5,7 @@ import { Bindings } from '../src/bindings';
 import { Context, WaitUntilFunc } from '../src/context';
 import { ConsoleLogger, Logger } from '../src/context/logging';
 import { MetricsRegistry } from '../src/context/metrics';
+import { jest } from '@jest/globals';
 
 export class MockCache implements Cache {
 	public cache: Record<string, Response> = {};
@@ -62,4 +63,26 @@ export const getContext = (options: MockContextOptions): Context => {
 	const metrics = options.metrics ?? new MetricsRegistry(options.env, {});
 	const waitUntilFunc = options.waitUntilFunc || options.ectx.waitUntil.bind(options.ectx);
 	return new Context(options.request, options.env, waitUntilFunc, logger, metrics);
+};
+
+const originalDateNow = Date.now;
+const originalDateConstructor = Date;
+
+export const mockDateNow = (...fixedTimeArg: ConstructorParameters<typeof Date>): void => {
+	const fixedTime = new originalDateConstructor(...fixedTimeArg).getTime();
+	global.Date.now = jest.fn(() => fixedTime);
+	global.Date = class extends Date {
+		constructor(...args: unknown[]) {
+			if (args.length === 0) {
+				super(fixedTime);
+			} else {
+				super(...(args as ConstructorParameters<typeof Date>));
+			}
+		}
+	} as typeof Date;
+};
+
+export const clearDateMocks = (): void => {
+	global.Date.now = originalDateNow;
+	global.Date = originalDateConstructor;
 };
