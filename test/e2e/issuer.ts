@@ -49,7 +49,7 @@ function getProtocol(host: string): string {
 async function getIssuerConfig(name: string, mTLS?: MTLSConfiguration) {
 	const protocol = getProtocol(name);
 	const proxyFetch = mTLS ? await fetchWithMTLS(mTLS) : fetch;
-	const response = await proxyFetch(`${protocol}//${name}${PRIVATE_TOKEN_ISSUER_DIRECTORY}`);
+	const response = await proxyFetch(`${protocol}//${name}${PRIVATE_TOKEN_ISSUER_DIRECTORY}`, { headers: { 'cf-force-research': '1' } });
 	const config: IssuerConfig = (await response.json()) as IssuerConfig;
 
 	const token = config['token-keys'].find(
@@ -104,7 +104,7 @@ export async function testE2E(issuerName: string, mTLS?: MTLSConfiguration): Pro
 		publicKeyEnc: issuerPublicKeyEnc,
 		publicKey: issuerPublicKey,
 		url: issuerRequestURL,
-	} = await getIssuerConfig(issuerName);
+	} = await getIssuerConfig(issuerName, mTLS);
 
 	const tokenRequest = await client.createTokenRequest(challenge, issuerPublicKeyEnc);
 
@@ -113,6 +113,7 @@ export async function testE2E(issuerName: string, mTLS?: MTLSConfiguration): Pro
 		method: 'POST',
 		headers: {
 			'Content-Type': MediaType.PRIVATE_TOKEN_REQUEST,
+			'cf-research-force': '1',
 			'Accept': MediaType.PRIVATE_TOKEN_RESPONSE,
 		},
 		body: tokenRequest.serialize().buffer as Buffer, // node-fetch fetch requires a node.js Buffer, but ArrayBuffer seems fine
