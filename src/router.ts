@@ -7,6 +7,7 @@ import { Context } from './context';
 import { ConsoleLogger, FlexibleLogger, Logger } from './context/logging';
 import { MetricsRegistry } from './context/metrics';
 import { MethodNotAllowedError, PageNotFoundError, handleError, HTTPError } from './errors';
+import { WshimLogger } from './context/logging';
 
 const HttpMethod = {
 	DELETE: 'DELETE',
@@ -97,7 +98,8 @@ export class Router {
 
 	private buildContext(request: Request, env: Bindings, ectx: ExecutionContext): Context {
 		// Prometheus Registry should be unique per request
-		const metrics = new MetricsRegistry(env, { bearerToken: env.LOGGING_SHIM_TOKEN });
+		const metrics = new MetricsRegistry(env);
+		const wshimLogger = new WshimLogger(env);
 
 		// Use a flexible reporter, so that it uses console.log when debugging, and Core Sentry when in production
 		let logger: Logger;
@@ -120,13 +122,14 @@ export class Router {
 				coloName: request?.cf?.colo as string,
 			});
 		}
-		return new Context(request, env, ectx.waitUntil.bind(ectx), logger, metrics);
+		return new Context(request, env, ectx.waitUntil.bind(ectx), logger, metrics, wshimLogger);
 	}
 
 	private async postProcessing(ctx: Context) {
 		// wait for async tasks to complete before reporting metrics
 		await ctx.waitForPromises();
 		await ctx.metrics.publish();
+		await ctx.wshimLogger.flushLogs();
 	}
 
 	// match exact path, and returns a response using the appropriate path handler

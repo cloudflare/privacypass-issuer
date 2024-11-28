@@ -4,6 +4,7 @@
 import type { Context } from 'toucan-js/dist/types';
 import { RewriteFrames, Toucan } from 'toucan-js';
 import { Breadcrumb } from '@sentry/types';
+import { Bindings } from '../bindings';
 
 // End toucan-js types
 
@@ -163,3 +164,85 @@ export class VoidLogger implements Logger {
 	info(category: string, message: string, data?: { [key: string]: any }): void {}
 }
 /* eslint-enable */
+
+interface LogEntry {
+	message: string;
+	level: string;
+	error?: string;
+}
+
+export class WshimLogger {
+	private logs: LogEntry[] = [];
+	private serviceToken: string;
+	private sampleRate: number;
+	private fetcher: typeof fetch;
+	private loggingEndpoint: string;
+
+	constructor(env: Bindings, sampleRate: number = 1) {
+		if (typeof sampleRate !== 'number' || isNaN(sampleRate) || sampleRate < 0 || sampleRate > 1) {
+			throw new Error('Sample rate must be a number between 0 and 1');
+		}
+
+		this.serviceToken = env.WSHIM_TOKEN;
+		this.sampleRate = sampleRate;
+		this.fetcher = env.WSHIM_SOCKET?.fetch ?? fetch;
+		this.loggingEndpoint = `${env.WSHIM_ENDPOINT}/log`;
+	}
+
+	private shouldLog(): boolean {
+		return Math.random() < this.sampleRate;
+	}
+
+	log(...msg: unknown[]): void {
+		if (!this.shouldLog()) return;
+
+		const message = msg.map(o => (typeof o === 'object' ? JSON.stringify(o) : String(o))).join(' ');
+		const logEntry: LogEntry = { message, level: 'info' };
+		this.logs.push(logEntry);
+	}
+
+	error(...msg: unknown[]): void {
+		if (!this.shouldLog()) return;
+
+		let logEntry: LogEntry;
+
+		if (msg.length === 1 && msg[0] instanceof Error) {
+			const error = msg[0] as Error;
+			logEntry = {
+				message: error.message,
+				level: 'error',
+				error: error.stack,
+			};
+		} else {
+			const message = msg
+				.map(o => (typeof o === 'object' ? JSON.stringify(o) : String(o)))
+				.join(' ');
+			logEntry = { message, level: 'error' };
+		}
+
+		this.logs.push(logEntry);
+	}
+
+	public async flushLogs(): Promise<void> {
+		if (this.logs.length === 0) return;
+
+		const body = JSON.stringify({
+			logs: this.logs,
+		});
+
+		try {
+			const response = await this.fetcher(this.loggingEndpoint, {
+				method: 'POST',
+				headers: { Authorization: `Bearer ${this.serviceToken}` },
+				body,
+			});
+			if (!response.ok) {
+				console.error(`Failed to flush logs: ${response.status} ${response.statusText}`);
+			}
+		} catch (error) {
+			console.error('Failed to flush logs:', error);
+		}
+
+		this.logs = [];
+	}
+}

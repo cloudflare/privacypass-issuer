@@ -8,7 +8,6 @@ export interface Bindings {
 	DIRECTORY_CACHE_MAX_AGE_SECONDS: string;
 	ENVIRONMENT: string;
 	SERVICE: string;
-	LOGGING_SHIM_TOKEN: string;
 	SENTRY_ACCESS_CLIENT_ID: string;
 	SENTRY_ACCESS_CLIENT_SECRET: string;
 	SENTRY_DSN: string;
@@ -27,4 +26,9 @@ export interface Bindings {
 	ROTATION_CRON_STRING?: string;
 	KEY_LIFESPAN_IN_MS: string;
 	MINIMUM_FRESHEST_KEYS: string;
+
+	// telemetry
+	WSHIM_TOKEN: string;
+	WSHIM_SOCKET?: Fetcher;
+	WSHIM_ENDPOINT: string;
 }

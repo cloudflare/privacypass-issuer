@@ -4,7 +4,6 @@
 import { CounterType, HistogramType, Labels, RegistryType } from 'promjs';
 import { Registry } from 'promjs/registry';
 import { Bindings } from '../bindings';
-export const METRICS_ENDPOINT = 'https://workers-logging.cfdata.org/prometheus';
 
 export const KeyError = {
 	NOT_FOUND: 'not-found',
@@ -13,8 +12,10 @@ export const KeyError = {
 	MISSING_PUBLIC_KEY: 'missing-public-key',
 };
 
-export interface RegistryOptions {
-	bearerToken?: string;
+interface RegistryOptions {
+	endpoint: string;
+	bearerToken: string;
+	fetcher: typeof fetch;
 }
 
 export interface DefaultLabels {
@@ -45,9 +46,13 @@ export class MetricsRegistry {
 	r2RequestsDurationMs: HistogramType;
 	signedTokenTotal: CounterType;
 
-	constructor(env: Bindings, options: RegistryOptions) {
+	constructor(env: Bindings) {
 		this.env = env;
-		this.options = options;
+		this.options = {
+			bearerToken: env.WSHIM_TOKEN,
+			endpoint: `${env.WSHIM_ENDPOINT}/prometheus`,
+			fetcher: env.WSHIM_SOCKET?.fetch ?? fetch,
+		};
 		this.registry = new Registry();
 
 		this.asyncRetriesTotal = this.create(
@@ -184,7 +189,7 @@ export class MetricsRegistry {
 	 * This function is a no-op in test and wrangler environements
 	 */
 	async publish(): Promise<void> {
-		await fetch(METRICS_ENDPOINT, {
+		await this.options.fetcher(this.options.endpoint, {
 			method: 'POST',
 			headers: {
 				Authorization: `Bearer ${this.options.bearerToken}`,
