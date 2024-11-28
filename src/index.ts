@@ -19,7 +19,7 @@ import {
 	publicVerif,
 	util,
 } from '@cloudflare/privacypass-ts';
-import { ConsoleLogger } from './context/logging';
+import { ConsoleLogger, WshimLogger } from './context/logging';
 import { KeyError, MetricsRegistry } from './context/metrics';
 import { hexEncode } from './utils/hex';
 import {
@@ -247,7 +247,7 @@ export const handleRotateKey = async (ctx: Context, _request?: Request) => {
 
 	ctx.waitUntil(clearDirectoryCache(ctx));
 
-	console.log(`Key rotated successfully, new key ${tokenKeyID}`);
+	ctx.wshimLogger.log(`Key rotated successfully, new key ${tokenKeyID}`);
 
 	return new Response(`New key ${publicKeyEnc}`, { status: 201 });
 };
@@ -288,9 +288,9 @@ export const handleClearKey = async (ctx: Context, _request?: Request) => {
 	const toDeleteArray = [...toDelete];
 
 	if (toDeleteArray.length > 0) {
-		console.log(`\nKeys cleared: ${toDeleteArray.join('\n')}`);
+		ctx.wshimLogger.log(`\nKeys cleared: ${toDeleteArray.join('\n')}`);
 	} else {
-		console.log('\nNo keys were cleared.');
+		ctx.wshimLogger.log('\nNo keys were cleared.');
 	}
 
 	await ctx.bucket.ISSUANCE_KEYS.delete(toDeleteArray);
@@ -325,7 +325,8 @@ export default {
 			env,
 			ectx.waitUntil.bind(ectx),
 			new ConsoleLogger(),
-			new MetricsRegistry(env, { bearerToken: env.LOGGING_SHIM_TOKEN })
+			new MetricsRegistry(env),
+			new WshimLogger(env)
 		);
 		const date = new Date(event.scheduledTime);
 

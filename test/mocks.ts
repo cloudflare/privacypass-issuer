@@ -3,7 +3,7 @@
 
 import { Bindings } from '../src/bindings';
 import { Context, WaitUntilFunc } from '../src/context';
-import { ConsoleLogger, Logger } from '../src/context/logging';
+import { ConsoleLogger, Logger, WshimLogger } from '../src/context/logging';
 import { MetricsRegistry } from '../src/context/metrics';
 import { jest } from '@jest/globals';
 
@@ -55,14 +55,16 @@ export interface MockContextOptions {
 	ectx: ExecutionContext;
 	logger?: Logger;
 	metrics?: MetricsRegistry;
+	wshimLogger?: WshimLogger;
 	waitUntilFunc?: WaitUntilFunc;
 }
 
 export const getContext = (options: MockContextOptions): Context => {
 	const logger = options.logger ?? new ConsoleLogger();
-	const metrics = options.metrics ?? new MetricsRegistry(options.env, {});
+	const metrics = options.metrics ?? new MetricsRegistry(options.env);
+	const wshimLogger = options.wshimLogger ?? new WshimLogger(options.env);
 	const waitUntilFunc = options.waitUntilFunc || options.ectx.waitUntil.bind(options.ectx);
-	return new Context(options.request, options.env, waitUntilFunc, logger, metrics);
+	return new Context(options.request, options.env, waitUntilFunc, logger, metrics, wshimLogger);
 };
 
 const originalDateNow = Date.now;

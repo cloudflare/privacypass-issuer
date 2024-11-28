@@ -18,7 +18,8 @@ export default {
 			// API options here:
 			testEnvironmentOptions: {
 				bindings: {
-					LOGGING_SHIM_TOKEN: '',
+					WSHIM_TOKEN: '',
+					WSHIM_ENDPOINT: 'https://example.com',
 					VERSION_METADATA: '',
 				},
 				wranglerConfigEnv: 'production',

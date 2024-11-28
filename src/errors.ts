@@ -27,7 +27,7 @@ export async function handleError(ctx: Context, error: Error, labels?: Labels) {
 
 	const status = (error as HTTPError).status ?? 500;
 	const message = error.message || 'Server Error';
-	console.log(message);
+	ctx.wshimLogger.log(message);
 	if (shouldSendToSentry(error)) {
 		ctx.logger.captureException(error);
 	}

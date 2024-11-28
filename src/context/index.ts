@@ -4,7 +4,7 @@
 import { Bindings } from '../bindings';
 import { APICache, CachedR2Bucket, InMemoryCache, CascadingCache } from '../cache';
 import { asyncRetries, DEFAULT_RETRIES } from '../utils/promises';
-import { Logger } from './logging';
+import { Logger, WshimLogger } from './logging';
 import { MetricsRegistry } from './metrics';
 
 export type WaitUntilFunc = (p: Promise<unknown>) => void;
@@ -21,7 +21,8 @@ export class Context {
 		public env: Bindings,
 		private _waitUntil: WaitUntilFunc,
 		public logger: Logger,
-		public metrics: MetricsRegistry
+		public metrics: MetricsRegistry,
+		public wshimLogger: WshimLogger
 	) {
 		// eslint-disable-next-line @typescript-eslint/no-this-alias
 		const ctx = this;
@@ -63,7 +64,7 @@ export class Context {
 		this._waitUntil(p);
 		this.promises.push(
 			p.catch((e: Error) => {
-				console.log(e.message);
+				this.wshimLogger.error(e.message);
 			})
 		);
 	}
@@ -79,7 +80,7 @@ export class Context {
 			try {
 				await this.promises[i];
 			} catch (e) {
-				console.log(e);
+				this.wshimLogger.error(e);
 			}
 		}
 	}
