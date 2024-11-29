@@ -183,7 +183,7 @@ export class WshimLogger {
 			throw new Error('Sample rate must be a number between 0 and 1');
 		}
 
-		this.serviceToken = env.WSHIM_TOKEN;
+		this.serviceToken = env.LOGGING_SHIM_TOKEN;
 		this.sampleRate = sampleRate;
 		this.fetcher = env.WSHIM_SOCKET?.fetch ?? fetch;
 		this.loggingEndpoint = `${env.WSHIM_ENDPOINT}/log`;

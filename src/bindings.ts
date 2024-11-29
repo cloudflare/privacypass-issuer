@@ -28,7 +28,7 @@ export interface Bindings {
 	MINIMUM_FRESHEST_KEYS: string;
 
 	// telemetry
-	WSHIM_TOKEN: string;
+	LOGGING_SHIM_TOKEN: string;
 	WSHIM_SOCKET?: Fetcher;
 	WSHIM_ENDPOINT: string;
 }

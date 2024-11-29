@@ -18,7 +18,7 @@ export default {
 			// API options here:
 			testEnvironmentOptions: {
 				bindings: {
-					WSHIM_TOKEN: '',
+					LOGGING_SHIM_TOKEN: '',
 					WSHIM_ENDPOINT: 'https://example.com',
 					VERSION_METADATA: '',
 				},

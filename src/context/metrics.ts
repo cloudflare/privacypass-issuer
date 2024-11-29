@@ -49,7 +49,7 @@ export class MetricsRegistry {
 	constructor(env: Bindings) {
 		this.env = env;
 		this.options = {
-			bearerToken: env.WSHIM_TOKEN,
+			bearerToken: env.LOGGING_SHIM_TOKEN,
 			endpoint: `${env.WSHIM_ENDPOINT}/prometheus`,
 			fetcher: env.WSHIM_SOCKET?.fetch ?? fetch,
 		};
