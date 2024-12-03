@@ -51,8 +51,9 @@ export class MetricsRegistry {
 		this.options = {
 			bearerToken: env.LOGGING_SHIM_TOKEN,
 			endpoint: `${env.WSHIM_ENDPOINT}/prometheus`,
-			fetcher: env.WSHIM_SOCKET?.fetch ?? fetch,
+			fetcher: env.WSHIM_SOCKET?.fetch?.bind(env.WSHIM_SOCKET) ?? fetch,
 		};
+
 		this.registry = new Registry();
 
 		this.asyncRetriesTotal = this.create(

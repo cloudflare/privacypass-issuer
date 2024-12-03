@@ -185,7 +185,7 @@ export class WshimLogger {
 
 		this.serviceToken = env.LOGGING_SHIM_TOKEN;
 		this.sampleRate = sampleRate;
-		this.fetcher = env.WSHIM_SOCKET?.fetch ?? fetch;
+		this.fetcher = env.WSHIM_SOCKET?.fetch?.bind(env.WSHIM_SOCKET) ?? fetch;
 		this.loggingEndpoint = `${env.WSHIM_ENDPOINT}/log`;
 	}
 
