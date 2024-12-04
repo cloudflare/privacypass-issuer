@@ -167,18 +167,23 @@ export class VoidLogger implements Logger {
 
 interface LogEntry {
 	message: string;
-	level: string;
+	log_level: string;
 	error?: string;
 }
 
 export class WshimLogger {
+	private request: Request;
+	private env: Bindings;
+
 	private logs: LogEntry[] = [];
 	private serviceToken: string;
 	private sampleRate: number;
 	private fetcher: typeof fetch;
 	private loggingEndpoint: string;
 
-	constructor(env: Bindings, sampleRate: number = 1) {
+	constructor(request: Request, env: Bindings, sampleRate: number = 1) {
+		this.request = request;
+		this.env = env;
 		if (typeof sampleRate !== 'number' || isNaN(sampleRate) || sampleRate < 0 || sampleRate > 1) {
 			throw new Error('Sample rate must be a number between 0 and 1');
 		}
@@ -193,11 +198,20 @@ export class WshimLogger {
 		return Math.random() < this.sampleRate;
 	}
 
+	private defaultFields() {
+		return {
+			'environment': this.env.ENVIRONMENT,
+			'http.host': this.request.url,
+			'http.user_agent': this.request.headers.get('User-Agent'),
+			'source_service': this.env.SERVICE,
+		};
+	}
+
 	log(...msg: unknown[]): void {
 		if (!this.shouldLog()) return;
 
 		const message = msg.map(o => (typeof o === 'object' ? JSON.stringify(o) : String(o))).join(' ');
-		const logEntry: LogEntry = { message, level: 'info' };
+		const logEntry: LogEntry = { message, log_level: 'info' };
 		this.logs.push(logEntry);
 	}
 
@@ -210,14 +224,14 @@ export class WshimLogger {
 			const error = msg[0] as Error;
 			logEntry = {
 				message: error.message,
-				level: 'error',
+				log_level: 'error',
 				error: error.stack,
 			};
 		} else {
 			const message = msg
 				.map(o => (typeof o === 'object' ? JSON.stringify(o) : String(o)))
 				.join(' ');
-			logEntry = { message, level: 'error' };
+			logEntry = { message, log_level: 'error' };
 		}
 
 		this.logs.push(logEntry);
@@ -226,8 +240,10 @@ export class WshimLogger {
 	public async flushLogs(): Promise<void> {
 		if (this.logs.length === 0) return;
 
+		const defaultFields = this.defaultFields();
+
 		const body = JSON.stringify({
-			logs: this.logs,
+			logs: this.logs.map(log => ({ message: { ...defaultFields, ...log } })),
 		});
 
 		try {

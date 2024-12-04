@@ -99,7 +99,7 @@ export class Router {
 	private buildContext(request: Request, env: Bindings, ectx: ExecutionContext): Context {
 		// Prometheus Registry should be unique per request
 		const metrics = new MetricsRegistry(env);
-		const wshimLogger = new WshimLogger(env);
+		const wshimLogger = new WshimLogger(request, env);
 
 		// Use a flexible reporter, so that it uses console.log when debugging, and Core Sentry when in production
 		let logger: Logger;

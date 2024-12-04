@@ -62,7 +62,7 @@ export interface MockContextOptions {
 export const getContext = (options: MockContextOptions): Context => {
 	const logger = options.logger ?? new ConsoleLogger();
 	const metrics = options.metrics ?? new MetricsRegistry(options.env);
-	const wshimLogger = options.wshimLogger ?? new WshimLogger(options.env);
+	const wshimLogger = options.wshimLogger ?? new WshimLogger(options.request, options.env);
 	const waitUntilFunc = options.waitUntilFunc || options.ectx.waitUntil.bind(options.ectx);
 	return new Context(options.request, options.env, waitUntilFunc, logger, metrics, wshimLogger);
 };
