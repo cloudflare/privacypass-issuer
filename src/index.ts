@@ -320,13 +320,14 @@ export default {
 	},
 
 	async scheduled(event: ScheduledEvent, env: Bindings, ectx: ExecutionContext) {
+		const sampleRequest = new Request(`https://schedule.example.com`);
 		const ctx = new Context(
-			new Request(`https://schedule.example.com`),
+			sampleRequest,
 			env,
 			ectx.waitUntil.bind(ectx),
 			new ConsoleLogger(),
 			new MetricsRegistry(env),
-			new WshimLogger(env)
+			new WshimLogger(sampleRequest, env)
 		);
 		const date = new Date(event.scheduledTime);
 
