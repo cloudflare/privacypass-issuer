@@ -39,6 +39,7 @@ const keyToTokenKeyID = async (key: Uint8Array): Promise<number> => {
 };
 
 interface StorageMetadata extends Record<string, string> {
+	notBefore: string;
 	publicKey: string;
 	tokenKeyID: string;
 }
@@ -176,7 +177,10 @@ export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 		'token-keys': keys.map(key => ({
 			'token-type': TokenType.BlindRSA,
 			'token-key': (key.customMetadata as StorageMetadata).publicKey,
-			'not-before': Math.trunc(new Date(key.uploaded).getTime() / 1000), // the spec mandates to use seconds
+			'not-before': Number.parseInt(
+				(key.customMetadata as StorageMetadata).notBefore ??
+					(new Date(key.uploaded).getTime() / 1000).toFixed(0)
+			),
 		})),
 	};
 
@@ -237,6 +241,9 @@ export const handleRotateKey = async (ctx: Context, _request?: Request) => {
 	} while ((await ctx.bucket.ISSUANCE_KEYS.head(tokenKeyID.toString())) !== null);
 
 	const metadata: StorageMetadata = {
+		notBefore: ((Date.now() + Number.parseInt(ctx.env.KEY_NOT_BEFORE_DELAY_IN_MS)) / 1000).toFixed(
+			0
+		), // the spec mandates to use seconds
 		publicKey: publicKeyEnc,
 		tokenKeyID: tokenKeyID.toString(),
 	};
@@ -270,7 +277,13 @@ export const handleClearKey = async (ctx: Context, _request?: Request) => {
 
 	for (let i = 0; i < keys.objects.length; i++) {
 		const key = keys.objects[i];
-		const keyUploadTime = new Date(key.uploaded);
+		const notBefore = key.customMetadata?.notBefore;
+		let keyNotBefore: Date;
+		if (notBefore) {
+			keyNotBefore = new Date(Number.parseInt(notBefore) * 1000);
+		} else {
+			keyNotBefore = new Date(key.uploaded);
+		}
 
 		const isFreshest = i < freshestKeyCount;
 
@@ -278,7 +291,7 @@ export const handleClearKey = async (ctx: Context, _request?: Request) => {
 			continue;
 		}
 
-		const shouldDelete = shouldClearKey(keyUploadTime, lifespanInMs);
+		const shouldDelete = shouldClearKey(keyNotBefore, lifespanInMs);
 
 		if (shouldDelete) {
 			toDelete.add(key.key);

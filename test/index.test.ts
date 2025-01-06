@@ -203,7 +203,7 @@ describe('directory', () => {
 
 		const directory = (await response.json()) as IssuerConfig;
 
-		let previousDate = Date.now();
+		let previousDate = Date.now() + Number.parseInt(env.KEY_NOT_BEFORE_DELAY_IN_MS);
 		for (const tokenKey of directory['token-keys']) {
 			if (!tokenKey['not-before']) {
 				continue;
