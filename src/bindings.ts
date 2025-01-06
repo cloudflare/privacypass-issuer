@@ -25,6 +25,7 @@ export interface Bindings {
 	// Key rotation schedule
 	ROTATION_CRON_STRING?: string;
 	KEY_LIFESPAN_IN_MS: string;
+	KEY_NOT_BEFORE_DELAY_IN_MS: string;
 	MINIMUM_FRESHEST_KEYS: string;
 
 	// telemetry
