@@ -179,7 +179,7 @@ export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 			'token-key': (key.customMetadata as StorageMetadata).publicKey,
 			'not-before': Number.parseInt(
 				(key.customMetadata as StorageMetadata).notBefore ??
-					(new Date(key.uploaded).getTime() / 1000).toFixed(0)
+				(new Date(key.uploaded).getTime() / 1000).toFixed(0)
 			),
 		})),
 	};
@@ -240,13 +240,31 @@ export const handleRotateKey = async (ctx: Context, _request?: Request) => {
 		// Otherwise, this loop is going to be infinite. With 255 keys, this iteration might take a while.
 	} while ((await ctx.bucket.ISSUANCE_KEYS.head(tokenKeyID.toString())) !== null);
 
+	// Calculate the notBefore value
+	const delay = Number.parseInt(ctx.env.KEY_NOT_BEFORE_DELAY_IN_MS);
+	const currentTime = Date.now();
+	const notBeforeValue = ((currentTime + delay) / 1000).toFixed(0);
+
+	// Log the intermediate calculations
+	ctx.wshimLogger.log(`Current time (ms): ${currentTime}`);
+	ctx.wshimLogger.log(`Delay (ms): ${delay}`);
+	ctx.wshimLogger.log(`Calculated notBefore (seconds): ${notBeforeValue}`);
+
+	// const metadata: StorageMetadata = {
+	// 	notBefore: ((Date.now() + Number.parseInt(ctx.env.KEY_NOT_BEFORE_DELAY_IN_MS)) / 1000).toFixed(
+	// 		0
+	// 	), // the spec mandates to use seconds
+	// 	publicKey: publicKeyEnc,
+	// 	tokenKeyID: tokenKeyID.toString(),
+	// };
+
 	const metadata: StorageMetadata = {
-		notBefore: ((Date.now() + Number.parseInt(ctx.env.KEY_NOT_BEFORE_DELAY_IN_MS)) / 1000).toFixed(
-			0
-		), // the spec mandates to use seconds
+		notBefore: notBeforeValue,
 		publicKey: publicKeyEnc,
 		tokenKeyID: tokenKeyID.toString(),
 	};
+
+	ctx.wshimLogger.log(`Metadata: ${JSON.stringify(metadata)}`);
 
 	await ctx.bucket.ISSUANCE_KEYS.put(tokenKeyID.toString(), privateKey, {
 		customMetadata: metadata,
