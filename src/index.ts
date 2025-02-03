@@ -31,6 +31,7 @@ import {
 const { BlindRSAMode, Issuer, TokenRequest } = publicVerif;
 
 import { shouldRotateKey, shouldClearKey } from './utils/keyRotation';
+import { WorkerEntrypoint } from 'cloudflare:workers';
 
 const keyToTokenKeyID = async (key: Uint8Array): Promise<number> => {
 	const hash = await crypto.subtle.digest('SHA-256', key);
@@ -312,11 +313,20 @@ export const handleClearKey = async (ctx: Context, _request?: Request) => {
 	return new Response(`Keys cleared: ${toDeleteArray.join('\n')}`, { status: 201 });
 };
 
-export default {
-	async fetch(request: Request, env: Bindings, ctx: ExecutionContext) {
-		// router defines all API endpoints
-		// this ease testing, as test can be performed on specific handler methods, not necessardily e2e
-		const router = new Router();
+
+const VALID_PATHS = new Set([
+	'/.well-known/token-issuer-directory',
+	'/token-request',
+	'/admin/rotate',
+	'/admin/clear',
+	'/',
+	PRIVATE_TOKEN_ISSUER_DIRECTORY,
+]);
+
+export class IssuerHandler extends WorkerEntrypoint<Bindings> {
+	async fetch(request: Request): Promise<Response> {
+		console.log("here, what is going on?????")
+		const router = new Router(VALID_PATHS);
 
 		router
 			.get(PRIVATE_TOKEN_ISSUER_DIRECTORY, handleTokenDirectory)
@@ -326,9 +336,17 @@ export default {
 
 		return router.handle(
 			request as Request<Bindings, IncomingRequestCfProperties<unknown>>,
-			env,
-			ctx
+			this.env,
+			this.ctx
 		);
+
+	}
+}
+
+export default {
+	async fetch(request: Request, env: Bindings, ctx: ExecutionContext) {
+		const issuerHandler = new IssuerHandler(ctx, env);
+		return issuerHandler.fetch(request);
 	},
 
 	async scheduled(event: ScheduledEvent, env: Bindings, ectx: ExecutionContext) {
@@ -342,6 +360,7 @@ export default {
 			new WshimLogger(sampleRequest, env)
 		);
 		const date = new Date(event.scheduledTime);
+		// const issuer = new IssuerHandler(ectx, env);
 
 		if (shouldRotateKey(date, env)) {
 			await handleRotateKey(ctx);
