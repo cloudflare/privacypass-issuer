@@ -111,9 +111,10 @@ export class InMemoryCryptoKeyCache {
 
 	constructor(private ctx: Context) {}
 
+	// The read method tries to retrieve the cached value, refresh it if necessary, and return the cached or refreshed value
 	async read(
 		key: string,
-		setValFn: (key: string) => Promise<CacheElement<CryptoKey>>
+		setValFn: (key: string) => Promise<CacheElement<CryptoKey>> // Function that represents the logic to populate the cache if it's a cache miss or needs to be refreshed (stale)
 	): Promise<CryptoKey> {
 		const refreshCache = async () => {
 			const val = await setValFn(key);
