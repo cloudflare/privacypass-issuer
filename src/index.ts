@@ -31,6 +31,8 @@ import {
 const { BlindRSAMode, Issuer, TokenRequest } = publicVerif;
 
 import { shouldRotateKey, shouldClearKey } from './utils/keyRotation';
+import { WorkerEntrypoint } from 'cloudflare:workers';
+import { IssuerResponse } from './types'
 
 const keyToTokenKeyID = async (key: Uint8Array): Promise<number> => {
 	const hash = await crypto.subtle.digest('SHA-256', key);
@@ -43,6 +45,15 @@ interface StorageMetadata extends Record<string, string> {
 	publicKey: string;
 	tokenKeyID: string;
 }
+
+export class IssuerHandler extends WorkerEntrypoint<Bindings> {
+	async tokenDirectory(request: Request, prefix: string): Promise<IssuerResponse> {
+		const ctx = Router.buildContext(request, this.env, this.ctx);
+		const jsonTokenResponse = await handleTokenDirectory(ctx, request, true);
+		return jsonTokenResponse as IssuerResponse;
+	}
+}
+
 
 export const handleTokenRequest = async (ctx: Context, request: Request) => {
 	ctx.metrics.issuanceRequestTotal.inc({ version: ctx.env.VERSION_METADATA.id ?? RELEASE });
@@ -132,7 +143,7 @@ export const handleTokenRequest = async (ctx: Context, request: Request) => {
 };
 
 export const handleHeadTokenDirectory = async (ctx: Context, request: Request) => {
-	const getResponse = await handleTokenDirectory(ctx, request);
+	const getResponse = await handleTokenDirectory(ctx, request) as Response;
 
 	return new Response(undefined, {
 		status: getResponse.status,
@@ -140,7 +151,7 @@ export const handleHeadTokenDirectory = async (ctx: Context, request: Request) =
 	});
 };
 
-export const handleTokenDirectory = async (ctx: Context, request: Request) => {
+export const handleTokenDirectory = async (ctx: Context, request: Request, isRCP: boolean = false): Promise<Response | IssuerResponse> => {
 	const cache = await getDirectoryCache();
 	let cachedResponse: Response | undefined;
 	try {
@@ -151,13 +162,22 @@ export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 	}
 	if (cachedResponse) {
 		if (request.headers.get('if-none-match') === cachedResponse.headers.get('etag')) {
-			return new Response(undefined, {
-				status: 304,
-				headers: cachedResponse.headers,
-			});
+			if (isRCP) {
+				const cachedBody = await cachedResponse.text();
+				const cachedDirectory: IssuerConfigurationResponse = JSON.parse(cachedBody);
+				return {
+					responseHeaders: cachedResponse.headers,
+					responseBody: cachedDirectory,
+				};
+			} else {
+				return new Response(undefined, {
+					status: 304,
+					headers: cachedResponse.headers,
+				});
+			}
 		}
-		return cachedResponse;
 	}
+
 	ctx.metrics.directoryCacheMissTotal.inc();
 
 	const keyList = await ctx.bucket.ISSUANCE_KEYS.list({ include: ['customMetadata'] });
@@ -179,26 +199,31 @@ export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 			'token-key': (key.customMetadata as StorageMetadata).publicKey,
 			'not-before': Number.parseInt(
 				(key.customMetadata as StorageMetadata).notBefore ??
-					(new Date(key.uploaded).getTime() / 1000).toFixed(0)
+				(new Date(key.uploaded).getTime() / 1000).toFixed(0)
 			),
 		})),
 	};
 
 	const body = JSON.stringify(directory);
+
+	// if rcp i could return the body here
+	// Ideally i would not replicate the rest of the funciton in pp-proxy
+
 	const digest = new Uint8Array(
 		await crypto.subtle.digest('SHA-256', new TextEncoder().encode(body))
 	);
 	const etag = `"${hexEncode(digest)}"`;
 
-	const response = new Response(body, {
-		headers: {
-			'content-type': MediaType.PRIVATE_TOKEN_ISSUER_DIRECTORY,
-			'cache-control': `public, max-age=${ctx.env.DIRECTORY_CACHE_MAX_AGE_SECONDS}`,
-			'content-length': body.length.toString(),
-			'date': new Date().toUTCString(),
-			etag,
-		},
-	});
+	const headers = {
+		'content-type': MediaType.PRIVATE_TOKEN_ISSUER_DIRECTORY,
+		'cache-control': `public, max-age=${ctx.env.DIRECTORY_CACHE_MAX_AGE_SECONDS}`,
+		'content-length': body.length.toString(),
+		'date': new Date().toUTCString(),
+		etag,
+	}
+
+	const response = new Response(body, { headers });
+
 	const toCacheResponse = response.clone();
 	// directory cache time within worker should be between 70% and 100% of browser cache time
 	const cacheTime = Math.floor(
@@ -206,6 +231,14 @@ export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 	).toFixed(0);
 	toCacheResponse.headers.set('cache-control', `public, max-age=${cacheTime}`);
 	ctx.waitUntil(cache.put(DIRECTORY_CACHE_REQUEST(ctx.hostname), toCacheResponse));
+
+	if (isRCP) {
+		const res: IssuerResponse = {
+			responseHeaders: headers,
+			responseBody: directory
+		}
+		return res;
+	}
 
 	return response;
 };
@@ -312,11 +345,20 @@ export const handleClearKey = async (ctx: Context, _request?: Request) => {
 	return new Response(`Keys cleared: ${toDeleteArray.join('\n')}`, { status: 201 });
 };
 
+
+const VALID_PATHS = new Set([
+	'/.well-known/token-issuer-directory',
+	'/token-request',
+	'/admin/rotate',
+	'/admin/clear',
+	'/',
+	PRIVATE_TOKEN_ISSUER_DIRECTORY,
+]);
+
+
 export default {
 	async fetch(request: Request, env: Bindings, ctx: ExecutionContext) {
-		// router defines all API endpoints
-		// this ease testing, as test can be performed on specific handler methods, not necessardily e2e
-		const router = new Router();
+		const router = new Router(VALID_PATHS);
 
 		router
 			.get(PRIVATE_TOKEN_ISSUER_DIRECTORY, handleTokenDirectory)
@@ -350,3 +392,8 @@ export default {
 		}
 	},
 };
+
+
+export { Router } from './router';
+export { Context } from './context';
+export { Bindings } from './bindings';
