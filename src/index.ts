@@ -44,6 +44,9 @@ interface StorageMetadata extends Record<string, string> {
 	publicKey: string;
 	tokenKeyID: string;
 }
+
+// If we move the rotation logic to a separate worker, we can define a rotation-specific named entry point.
+// https://developers.cloudflare.com/workers/runtime-apis/bindings/service-bindings/rpc/
 export class IssuerHandler extends WorkerEntrypoint<Bindings> {
 	handleTokenRequest = async (ctx: Context, request: Request) => {
 		ctx.metrics.issuanceRequestTotal.inc({ version: ctx.env.VERSION_METADATA.id ?? RELEASE });
