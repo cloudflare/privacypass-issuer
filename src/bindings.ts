@@ -3,7 +3,6 @@
 
 import { Issuer } from '@cloudflare/privacypass-ts/lib/src/priv_verif_token';
 import type { R2Bucket, Performance } from '@cloudflare/workers-types/2023-07-01';
-import { IssuerHandler } from '.';
 
 export interface Bindings {
 	// variables and secrets

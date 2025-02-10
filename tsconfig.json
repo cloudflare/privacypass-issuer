@@ -1,6 +1,9 @@
 {
 	"compilerOptions": {
-		"noEmit": true,
+		"noEmit": false,  // Allow TypeScript to generate output files
+		"declaration": true, // Generate .d.ts files
+		"emitDeclarationOnly": true, // Only emit type declarations
+		"declarationDir": "./dist/types", // Store .d.ts files in dist/types
 		"module": "esnext",
 		"target": "es2020",
 		"lib": ["es2020"],
