@@ -36,5 +36,5 @@ export interface Bindings {
 	WSHIM_ENDPOINT: string;
 
 	// Service bindings (RCP)
-	IssuerHandler: Service<IssuerHandler>
+	// IssuerHandler: Service<IssuerHandler>
 }
