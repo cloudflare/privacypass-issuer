@@ -3,8 +3,28 @@
 	"version": "0.1.0",
 	"type": "module",
 	"main": "dist/worker.mjs",
+	"types": "dist/types/index.d.ts",
 	"license": "Apache-2.0",
 	"private": true,
+	"files": [ "dist"] ,
+	"exports": {
+		".": {
+			"import": "./dist/worker.mjs",
+			"types": "./dist/index.d.ts"
+		},
+		"./router": {
+			"import": "./dist/worker.mjs",
+			"types": "./dist/router.d.ts"
+		},
+		"./context": {
+			"import": "./dist/worker.mjs",
+			"types": "./dist/context/index.d.ts"
+		},
+		"./bindings": {
+			"import": "./dist/worker.mjs",
+			"types": "./dist/bindings.d.ts"
+		}
+	},
 	"scripts": {
 		"build": "tsc && node scripts/cli.js build",
 		"deploy:production": "wrangler deploy --no-bundle --env production",

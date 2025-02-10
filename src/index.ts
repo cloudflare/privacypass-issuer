@@ -32,6 +32,7 @@ const { BlindRSAMode, Issuer, TokenRequest } = publicVerif;
 
 import { shouldRotateKey, shouldClearKey } from './utils/keyRotation';
 import { WorkerEntrypoint } from 'cloudflare:workers';
+import { MyResponse, ResponseFactory, StandardResponse } from './utils/jsonResponse'; // todo rename json file as it is misleading
 
 const keyToTokenKeyID = async (key: Uint8Array): Promise<number> => {
 	const hash = await crypto.subtle.digest('SHA-256', key);
@@ -45,7 +46,63 @@ interface StorageMetadata extends Record<string, string> {
 	tokenKeyID: string;
 }
 
-// If we move the rotation logic to a separate worker, we can define a rotation-specific named entry point.
+export class SumService extends WorkerEntrypoint<Bindings> {
+	async fetch(request: Request): Promise<Response> {
+		// console.log("VALID_PATHS", VALID_PATHS);
+		console.log("inside fetch of the SumService");
+		const router = new Router(VALID_PATHS);
+		const issuer = new IssuerHandler(this.ctx, this.env);
+
+		router
+			.get(PRIVATE_TOKEN_ISSUER_DIRECTORY, issuer.handleTokenDirectory)
+			.post('/token-request', issuer.handleTokenRequest)
+			.post('/admin/rotate', issuer.handleRotateKey)
+			.post('/admin/clear', issuer.handleClearKey);
+
+		return router.handle(
+			request as Request<Bindings, IncomingRequestCfProperties<unknown>>,
+			this.env,
+			this.ctx
+		);
+
+		return new Response("Hello from pp-issuer");
+	}
+
+	async add(a: number, b: number) {
+		return a + b;
+	}
+
+	async handleRCPTest(ctx: Context, request: Request, isRCP?: boolean): Promise<StandardResponse> {
+		// async handleRCPTest(ctx: Context, request: Request, isRCP?: boolean): Promise<StandardResponse> {
+
+		const resObj: StandardResponse = {
+			status: 200,
+			statusText: "OK",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({ message: "Hello World :)" }),
+			// body: "Hello World :)",
+		};
+
+		return resObj;
+	}
+
+
+
+	async handleRCPTestiResp(): Promise<MyResponse> {
+		// Construct a real Response object (structured cloneable)
+		// Declare myResponse type
+		return {
+			status: 200,
+			message: "OK",
+			body: "Hello World :)",
+			headers: { "content-type": "application/json" },
+		};
+	}
+}
+
+
+// If we move the rotation logic to a separate worker, we can def  '
+// ine a rotation-specific named entry point.
 // https://developers.cloudflare.com/workers/runtime-apis/bindings/service-bindings/rpc/
 export class IssuerHandler extends WorkerEntrypoint<Bindings> {
 	handleTokenRequest = async (ctx: Context, request: Request) => {
@@ -144,7 +201,9 @@ export class IssuerHandler extends WorkerEntrypoint<Bindings> {
 		});
 	};
 
-	handleTokenDirectory = async (ctx: Context, request: Request) => {
+	// need to have the isRCP in case the handler is called via RCP, this flag is set to false when the method is registered in the router
+	// could this be a problem later as the flag is set to false in the path as well in the proxy code? 
+	handleTokenDirectory = async (ctx: Context, request: Request, isRCP?: boolean) => {
 		const cache = await getDirectoryCache();
 		let cachedResponse: Response | undefined;
 		try {
@@ -166,6 +225,7 @@ export class IssuerHandler extends WorkerEntrypoint<Bindings> {
 			}
 			return cachedResponse;
 		}
+
 		ctx.metrics.directoryCacheMissTotal.inc();
 
 		const keyList = await ctx.bucket.ISSUANCE_KEYS.list({ include: ['customMetadata'] });
@@ -197,6 +257,23 @@ export class IssuerHandler extends WorkerEntrypoint<Bindings> {
 			await crypto.subtle.digest('SHA-256', new TextEncoder().encode(body))
 		);
 		const etag = `"${hexEncode(digest)}"`;
+
+		const headers = {
+			'content-type': MediaType.PRIVATE_TOKEN_ISSUER_DIRECTORY,
+			'cache-control': `public, max-age=${ctx.env.DIRECTORY_CACHE_MAX_AGE_SECONDS}`,
+			'content-length': body.length.toString(),
+			'date': new Date().toUTCString(),
+			etag,
+		};
+
+		const stdRes: StandardResponse = {
+			status: 200,
+			statusText: 'OK',
+			headers,
+			body,
+		}
+
+		// return ResponseFactory.createResponse(stdRes, true, ctx, isRCP);
 
 		const response = new Response(body, {
 			headers: {
@@ -321,11 +398,21 @@ export class IssuerHandler extends WorkerEntrypoint<Bindings> {
 	};
 }
 
+const VALID_PATHS = new Set([
+	'/.well-known/token-issuer-directory',
+	'/token-request',
+	'/admin/rotate',
+	'/admin/clear',
+	'/',
+	PRIVATE_TOKEN_ISSUER_DIRECTORY,
+]);
+
+
 export default {
 	async fetch(request: Request, env: Bindings, ctx: ExecutionContext) {
 		// router defines all API endpoints
 		// this ease testing, as test can be performed on specific handler methods, not necessardily e2e
-		const router = new Router();
+		const router = new Router(VALID_PATHS);
 		const issuer = new IssuerHandler(ctx, env);
 
 		router
@@ -361,3 +448,7 @@ export default {
 		}
 	},
 };
+
+export { Router } from './router';
+export { Context } from './context';
+export { Bindings } from './bindings';

@@ -3,7 +3,9 @@
 
 import { Issuer } from '@cloudflare/privacypass-ts/lib/src/priv_verif_token';
 import type { R2Bucket, Performance } from '@cloudflare/workers-types/2023-07-01';
+import { ServiceBindingQueueMessage } from '@cloudflare/workers-types/experimental';
 import { IssuerHandler } from '.';
+import { SumService } from '.';
 
 export interface Bindings {
 	// variables and secrets
@@ -30,11 +32,13 @@ export interface Bindings {
 	KEY_NOT_BEFORE_DELAY_IN_MS: string;
 	MINIMUM_FRESHEST_KEYS: string;
 
-	// telemetry
+	// Telemetry
 	LOGGING_SHIM_TOKEN: string;
 	WSHIM_SOCKET?: Fetcher;
 	WSHIM_ENDPOINT: string;
 
-	// Service bindings (RCP)
-	// IssuerHandler: Service<IssuerHandler>
+	// Service Bindings 
+	PRIVACYPASS_ISSUER: Service<IssuerHandler>
+	PRIVACYPASS_SUM: Service<SumService>
+
 }

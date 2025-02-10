@@ -46,8 +46,7 @@ export class MetricsRegistry {
 	r2RequestsDurationMs: HistogramType;
 	signedTokenTotal: CounterType;
 
-	constructor(env: Bindings) {
-		this.env = env;
+	constructor(env: Bindings) {		this.env = env;
 		this.options = {
 			bearerToken: env.LOGGING_SHIM_TOKEN,
 			endpoint: `${env.WSHIM_ENDPOINT}/prometheus`,
