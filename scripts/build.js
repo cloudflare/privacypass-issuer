@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url';
 import { build } from 'esbuild';
 import git from 'git-rev-sync';
 import Sentry from '@sentry/cli';
+import { execSync } from 'child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -21,12 +22,17 @@ export async function buildCmd(opts) {
 	const release = `privacy-pass-issuer@${version}-${opts.env}+${git.short(__dirname)}`;
 	console.log(`Building ${release}`);
 
+	// Generate TypeScript declaration files 
+	// RCP binding uses extended class IssuerHandler
+	console.log("Generating TypeScript declaration files...");
+	execSync("tsc --emitDeclarationOnly --outDir dist/types", { stdio: 'inherit' });
+
 	await build({
 		bundle: true,
 		sourcemap: true,
 		format: 'esm',
 		target: 'esnext',
-		external: ['__STATIC_CONTENT_MANIFEST'],
+		external: ['__STATIC_CONTENT_MANIFEST', 'cloudflare:workers'],
 		legalComments: 'external',
 		conditions: ['worker', 'browser'],
 		entryPoints: [path.join(__dirname, '..', 'src', 'index.ts')],

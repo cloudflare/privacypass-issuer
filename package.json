@@ -3,6 +3,7 @@
 	"version": "0.1.0",
 	"type": "module",
 	"main": "dist/worker.mjs",
+	"types": "dist/types/index.d.ts",
 	"license": "Apache-2.0",
 	"private": true,
 	"scripts": {
@@ -35,7 +36,7 @@
 	},
 	"devDependencies": {
 		"@cloudflare/blindrsa-ts": "0.3.2",
-		"@cloudflare/workers-types": "4.20240605.0",
+		"@cloudflare/workers-types": "^4.20250129.0",
 		"@types/jest": "29.5.11",
 		"@typescript-eslint/eslint-plugin": "6.21.0",
 		"@typescript-eslint/parser": "6.21.0",

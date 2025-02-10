@@ -1,4 +1,5 @@
-dist
+dist/*
+!dist/types/
 node_modules
 transpiled
 coverage

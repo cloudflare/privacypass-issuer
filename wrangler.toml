@@ -1,5 +1,5 @@
 main = "./dist/worker.mjs"
-compatibility_date = "2023-04-01"
+compatibility_date = "2024-12-18"
 workers_dev = false # Enable it for development purposes, and if you are want a domain ending with .workers.dev
 account_id = "your-account-id-here" # Log in dash.cloudflare.com, select an account, go to Workers, and copy Account ID
 
@@ -22,7 +22,6 @@ MINIMUM_FRESHEST_KEYS = "1"
 ROTATION_CRON_STRING = "30 12 * * *"
 SENTRY_SAMPLE_RATE = "0" # Between 0-1 if you log errors on Sentry. 0 disables Sentry logging. Configuration is done through Workers Secrets
 SERVICE = "pp-issuer-production"
-
 [[env.production.r2_buckets]]
 bucket_name = 'pp-issuer-keys-production' # wrangler r2 bucket create pp-issuer-keys-production. Pricing and free tier described on https://developers.cloudflare.com/r2/pricing
 preview_bucket_name = 'pp-issuer-keys-production-local'
