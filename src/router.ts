@@ -8,8 +8,9 @@ import { ConsoleLogger, FlexibleLogger, Logger } from './context/logging';
 import { MetricsRegistry } from './context/metrics';
 import { MethodNotAllowedError, PageNotFoundError, handleError, HTTPError } from './errors';
 import { WshimLogger } from './context/logging';
+import { StandardResponse } from './utils/jsonResponse'; // todo rename json file as it is misleading
 
-const HttpMethod = {
+export const HttpMethod = {
 	DELETE: 'DELETE',
 	GET: 'GET',
 	HEAD: 'HEAD',
@@ -17,8 +18,22 @@ const HttpMethod = {
 	PUT: 'PUT',
 } as const;
 
-type ExportedHandlerFetchHandler = (ctx: Context, request: Request) => Response | Promise<Response>;
-type HttpMethod = (typeof HttpMethod)[keyof typeof HttpMethod];
+
+// TODO: We could have a "Response" factory that allows us to return responses with a more sophisticated structure.
+export type ExportedHandlerFetchHandler = (
+	ctx: Context,
+	request: Request,
+	isRCP?: boolean
+) => Response | Promise<Response>;
+// ) => Response | Promise<Response | StandardResponse>;
+
+// export type ExportedHandlerFetchHandler = (
+// 	ctx: Context,
+// 	request: Request,
+// 	isRCP?: boolean
+// ) => Response | Promise<Response>;
+
+export type HttpMethod = (typeof HttpMethod)[keyof typeof HttpMethod];
 
 // Simple router
 // Register HTTP method handlers, and then handles them by exact path match
@@ -27,20 +42,15 @@ export class Router {
 		[key: string]: { [key: string]: ExportedHandlerFetchHandler };
 	} = {};
 
-	// Normalise path, so that they never end with a trailing '/'
+	private validPaths: Set<string>;
+
+	constructor(validPaths: Set<string>) {
+		this.validPaths = validPaths;
+	}
+
 	private normalisePath(path: string): string {
 		const normalised = path.endsWith('/') ? path.slice(0, -1) : path;
-		switch (normalised) {
-			case PRIVATE_TOKEN_ISSUER_DIRECTORY:
-			case '/.well-known/token-issuer-directory':
-			case '/token-request':
-			case '/admin/rotate':
-			case '/admin/clear':
-			case '/':
-				return normalised;
-			default:
-				return '/not-found';
-		}
+		return this.validPaths.has(normalised) ? normalised : '/not-found';
 	}
 
 	// Register a handler for a specific path on the router
@@ -66,7 +76,9 @@ export class Router {
 				ctx: Context,
 				request: Request
 			): Promise<Response> => {
-				const response = await handler(ctx, request);
+				// here we will be calling "testRCPBidning from pp-proxy"
+				// so testRCPBinding should return a Response
+				const response = await handler(ctx, request) as Response;
 				if (response.ok) {
 					return new Response(null, response);
 				}
@@ -146,7 +158,7 @@ export class Router {
 		// check if there exist a handler for the specific method and path.
 		// first filtering by method, then checking the path.
 		// dev: if there needs to be argument-in-path down the line, this is where the context would be built and validated
-		let response: Response;
+		let response: Response | StandardResponse;
 		try {
 			const handlers = this.handlers[request.method as HttpMethod];
 			if (!handlers) {
@@ -155,7 +167,11 @@ export class Router {
 			if (!(path in handlers)) {
 				throw new PageNotFoundError();
 			}
+			// returning as response here might be causing the issue as the handler should return a StandardResponse to rcp and rcp is using this router 
+			// response = await handlers[path](ctx, request) as Response;
+			// print the type of response
 			response = await handlers[path](ctx, request);
+			console.log("The type of response is: ", typeof response);
 		} catch (e: unknown) {
 			let status = 500;
 			if (e instanceof HTTPError) {

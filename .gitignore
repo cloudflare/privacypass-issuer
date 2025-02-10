@@ -1,6 +1,51 @@
-dist
+# Ignore
 node_modules
 transpiled
 coverage
-worker.mjs*
+# worker.mjs*
 .wrangler
+# *.js.map
+
+# # Ignore everything inside dist/
+# dist/*
+
+# # Un-ignore the dist directory itself so Git can look inside it
+# !dist/
+
+# # Allow specific files inside dist/
+# !dist/router.js
+# !dist/index.js
+
+# # Ignore everything inside dist/context
+# dist/context/*
+
+# # Un-ignore the dist/context folder
+# !dist/context/
+
+# # Allow only specific files inside dist/context/
+# !dist/context/index.js
+# !dist/context/logging.js
+# !dist/context/metrics.js
+
+# # Ignore everything inside dist/types
+# dist/types/*
+
+# # Un-ignore the dist/types folder
+# !dist/types/
+
+# # Allow specific files inside dist/types/
+# !dist/types/index.d.ts
+# !dist/types/router.d.ts
+# !dist/types/bindings.d.ts
+
+# # Ignore everything inside dist/types/context
+# dist/types/context/*
+
+# # Un-ignore the dist/types/context folder
+# !dist/types/context/
+
+# # Allow only specific files inside dist/types/context/
+# !dist/types/context/index.d.ts
+# !dist/types/context/logging.d.ts
+# !dist/types/context/metrics.d.ts
+

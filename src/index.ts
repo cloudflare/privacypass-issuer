@@ -32,6 +32,7 @@ const { BlindRSAMode, Issuer, TokenRequest } = publicVerif;
 
 import { shouldRotateKey, shouldClearKey } from './utils/keyRotation';
 import { WorkerEntrypoint } from 'cloudflare:workers';
+import { MyResponse, ResponseFactory, StandardResponse } from './utils/jsonResponse'; // todo rename json file as it is misleading
 
 const keyToTokenKeyID = async (key: Uint8Array): Promise<number> => {
 	const hash = await crypto.subtle.digest('SHA-256', key);
@@ -45,7 +46,64 @@ interface StorageMetadata extends Record<string, string> {
 	tokenKeyID: string;
 }
 
-// If we move the rotation logic to a separate worker, we can define a rotation-specific named entry point.
+export class SumService extends WorkerEntrypoint<Bindings> {
+	async fetch(request: Request): Promise<Response> {
+		const router = new Router(VALID_PATHS);
+		const issuer = new IssuerHandler(this.ctx, this.env);
+
+		router
+			.get(PRIVATE_TOKEN_ISSUER_DIRECTORY, issuer.handleTokenDirectory)
+			.post('/token-request', issuer.handleTokenRequest)
+			.post('/admin/rotate', issuer.handleRotateKey)
+			.post('/admin/clear', issuer.handleClearKey);
+
+		return router.handle(
+			request as Request<Bindings, IncomingRequestCfProperties<unknown>>,
+			this.env,
+			this.ctx
+		);
+
+		// return new Response("Hello from pp-issuer");
+	}
+
+	async add(a: number, b: number) {
+		return a + b;
+	}
+
+	async handleRCPTest(ctx: Context, request: Request, isRCP?: boolean): Promise<StandardResponse> {
+		// async handleRCPTest(ctx: Context, request: Request, isRCP?: boolean): Promise<StandardResponse> {
+		console.log("Inside handleRCPTest in pp-issuer");
+
+		const resObj: StandardResponse = {
+			status: 200,
+			statusText: "OK",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({ message: "Hello World :)" }),
+			// body: "Hello World :)",
+		};
+
+		return resObj;
+	}
+
+
+
+	async handleRCPTestiResp(): Promise<MyResponse> {
+		console.log("Inside handleRCPTest in pp-issuer");
+
+		// Construct a real Response object (structured cloneable)
+		// Declare myResponse type
+		return {
+			status: 200,
+			message: "OK",
+			body: "Hello World :)",
+			headers: { "content-type": "application/json" },
+		};
+	}
+}
+
+
+// If we move the rotation logic to a separate worker, we can def  '
+// ine a rotation-specific named entry point.
 // https://developers.cloudflare.com/workers/runtime-apis/bindings/service-bindings/rpc/
 export class IssuerHandler extends WorkerEntrypoint<Bindings> {
 	handleTokenRequest = async (ctx: Context, request: Request) => {
@@ -144,7 +202,9 @@ export class IssuerHandler extends WorkerEntrypoint<Bindings> {
 		});
 	};
 
-	handleTokenDirectory = async (ctx: Context, request: Request) => {
+	// need to have the isRCP in case the handler is called via RCP, this flag is set to false when the method is registered in the router
+	// could this be a problem later as the flag is set to false in the path as well in the proxy code? 
+	handleTokenDirectory = async (ctx: Context, request: Request, isRCP?: boolean) => {
 		const cache = await getDirectoryCache();
 		let cachedResponse: Response | undefined;
 		try {
@@ -198,6 +258,23 @@ export class IssuerHandler extends WorkerEntrypoint<Bindings> {
 		);
 		const etag = `"${hexEncode(digest)}"`;
 
+		const headers = {
+			'content-type': MediaType.PRIVATE_TOKEN_ISSUER_DIRECTORY,
+			'cache-control': `public, max-age=${ctx.env.DIRECTORY_CACHE_MAX_AGE_SECONDS}`,
+			'content-length': body.length.toString(),
+			'date': new Date().toUTCString(),
+			etag,
+		};
+
+		const stdRes: StandardResponse = {
+			status: 200,
+			statusText: 'OK',
+			headers,
+			body,
+		}
+
+		// return ResponseFactory.createResponse(stdRes, true, ctx, isRCP);
+
 		const response = new Response(body, {
 			headers: {
 				'content-type': MediaType.PRIVATE_TOKEN_ISSUER_DIRECTORY,
@@ -217,6 +294,81 @@ export class IssuerHandler extends WorkerEntrypoint<Bindings> {
 
 		return response;
 	};
+
+
+	// handleTokenDirectory = async (ctx: Context, request: Request, isRCP: boolean) => {
+	// 	const cache = await getDirectoryCache();
+	// 	let cachedResponse: Response | undefined;
+	// 	try {
+	// 		cachedResponse = await cache.match(DIRECTORY_CACHE_REQUEST(ctx.hostname));
+	// 	} catch (e: unknown) {
+	// 		const err = e as Error;
+	// 		throw new InternalCacheError(err.message);
+	// 	}
+	// 	if (cachedResponse) {
+	// 		// the cleint send an etag that is the same as in the cahced response 
+	// 		// this means the token directory cached value has not chaged as the etag is the same
+	// 		// because of this we can return the headers of the valid cached response
+	// 		// and return a 304 status code which menas "not modified"
+	// 		if (request.headers.get('if-none-match') === cachedResponse.headers.get('etag')) {
+	// 			return new Response(undefined, {
+	// 				status: 304,
+	// 				headers: cachedResponse.headers,
+	// 			});
+	// 		}
+	// 		return cachedResponse;
+	// 	}
+	// 	ctx.metrics.directoryCacheMissTotal.inc();
+
+	// 	const keyList = await ctx.bucket.ISSUANCE_KEYS.list({ include: ['customMetadata'] });
+
+	// 	if (keyList.objects.length === 0) {
+	// 		throw new Error('Issuer not initialised');
+	// 	}
+
+	// 	// there is no reason for an auditor to continue serving keys beyond the minimum requirement
+	// 	const freshestKeyCount = Number.parseInt(ctx.env.MINIMUM_FRESHEST_KEYS);
+	// 	const keys = keyList.objects
+	// 		.sort((a, b) => new Date(b.uploaded).getTime() - new Date(a.uploaded).getTime())
+	// 		.slice(0, freshestKeyCount);
+
+	// 	const directory: IssuerConfigurationResponse = {
+	// 		'issuer-request-uri': '/token-request',
+	// 		'token-keys': keys.map(key => ({
+	// 			'token-type': TokenType.BlindRSA,
+	// 			'token-key': (key.customMetadata as StorageMetadata).publicKey, // this is how to extract the custom metadata
+	// 			'not-before': Number.parseInt(
+	// 				(key.customMetadata as StorageMetadata).notBefore ??
+	// 				(new Date(key.uploaded).getTime() / 1000).toFixed(0)
+	// 			),
+	// 		})),
+	// 	};
+
+	// 	const body = JSON.stringify(directory);
+	// 	const digest = new Uint8Array(
+	// 		await crypto.subtle.digest('SHA-256', new TextEncoder().encode(body))
+	// 	);
+	// 	const etag = `"${hexEncode(digest)}"`;
+
+	// 	const response = new Response(body, {
+	// 		headers: {
+	// 			'content-type': MediaType.PRIVATE_TOKEN_ISSUER_DIRECTORY,
+	// 			'cache-control': `public, max-age=${ctx.env.DIRECTORY_CACHE_MAX_AGE_SECONDS}`,
+	// 			'content-length': body.length.toString(),
+	// 			'date': new Date().toUTCString(),
+	// 			etag,
+	// 		},
+	// 	});
+	// 	const toCacheResponse = response.clone();
+	// 	// directory cache time within worker should be between 70% and 100% of browser cache time
+	// 	const cacheTime = Math.floor(
+	// 		Number.parseInt(ctx.env.DIRECTORY_CACHE_MAX_AGE_SECONDS) * (0.7 + 0.3 * Math.random())
+	// 	).toFixed(0);
+	// 	toCacheResponse.headers.set('cache-control', `public, max-age=${cacheTime}`);
+	// 	ctx.waitUntil(cache.put(DIRECTORY_CACHE_REQUEST(ctx.hostname), toCacheResponse));
+
+	// 	return response;
+	// };
 
 	handleRotateKey = async (ctx: Context, _request?: Request) => {
 		ctx.metrics.keyRotationTotal.inc();
@@ -321,11 +473,21 @@ export class IssuerHandler extends WorkerEntrypoint<Bindings> {
 	};
 }
 
+const VALID_PATHS = new Set([
+	'/.well-known/token-issuer-directory',
+	'/token-request',
+	'/admin/rotate',
+	'/admin/clear',
+	'/',
+	PRIVATE_TOKEN_ISSUER_DIRECTORY,
+]);
+
+
 export default {
 	async fetch(request: Request, env: Bindings, ctx: ExecutionContext) {
 		// router defines all API endpoints
 		// this ease testing, as test can be performed on specific handler methods, not necessardily e2e
-		const router = new Router();
+		const router = new Router(VALID_PATHS);
 		const issuer = new IssuerHandler(ctx, env);
 
 		router
@@ -361,3 +523,7 @@ export default {
 		}
 	},
 };
+
+export { Router } from './router';
+export { Context } from './context';
+export { Bindings } from './bindings';
