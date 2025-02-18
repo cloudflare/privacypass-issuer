@@ -25029,7 +25029,7 @@ async function handleError(ctx, error, labels) {
   console.error(error.stack);
   ctx.metrics.erroredRequestsTotal.inc({
     ...labels,
-    version: ctx.env.VERSION_METADATA.id ?? "privacy-pass-issuer@v0.1.0.next-dev+89e6fe0"
+    version: ctx.env.VERSION_METADATA.id ?? "privacy-pass-issuer@v0.1.0.next-dev+8e46885"
   });
   const status = error.status ?? 500;
   const message = error.message || "Server Error";
@@ -25202,7 +25202,7 @@ var Router = class {
         dsn: env.SENTRY_DSN,
         accessClientId: env.SENTRY_ACCESS_CLIENT_ID,
         accessClientSecret: env.SENTRY_ACCESS_CLIENT_SECRET,
-        release: "privacy-pass-issuer@v0.1.0.next-dev+89e6fe0",
+        release: "privacy-pass-issuer@v0.1.0.next-dev+8e46885",
         service: env.SERVICE,
         sampleRate: sentrySampleRate,
         coloName: request?.cf?.colo
@@ -25224,7 +25224,6 @@ var Router = class {
     let response;
     try {
       const handlers2 = this.handlers[request.method];
-      console.log("path is: ", path);
       if (!handlers2) {
         throw new MethodNotAllowedError();
       }
@@ -25307,35 +25306,16 @@ var SumService = class extends WorkerEntrypoint {
       this.env,
       this.ctx
     );
-    return new Response("Hello from pp-issuer");
   }
   async add(a, b) {
     return a + b;
-  }
-  async handleRCPTest(ctx, request, isRCP) {
-    const resObj = {
-      status: 200,
-      statusText: "OK",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ message: "Hello World :)" })
-      // body: "Hello World :)",
-    };
-    return resObj;
-  }
-  async handleRCPTestiResp() {
-    return {
-      status: 200,
-      message: "OK",
-      body: "Hello World :)",
-      headers: { "content-type": "application/json" }
-    };
   }
 };
 var IssuerHandler = class extends WorkerEntrypoint {
   constructor() {
     super(...arguments);
     this.handleTokenRequest = async (ctx, request) => {
-      ctx.metrics.issuanceRequestTotal.inc({ version: ctx.env.VERSION_METADATA.id ?? "privacy-pass-issuer@v0.1.0.next-dev+89e6fe0" });
+      ctx.metrics.issuanceRequestTotal.inc({ version: ctx.env.VERSION_METADATA.id ?? "privacy-pass-issuer@v0.1.0.next-dev+8e46885" });
       const contentType = request.headers.get("content-type");
       if (!contentType || contentType !== MediaType.PRIVATE_TOKEN_REQUEST) {
         throw new HeaderNotDefinedError(`"Content-Type" must be "${MediaType.PRIVATE_TOKEN_REQUEST}"`);
@@ -25463,12 +25443,6 @@ var IssuerHandler = class extends WorkerEntrypoint {
         "content-length": body.length.toString(),
         "date": (/* @__PURE__ */ new Date()).toUTCString(),
         etag
-      };
-      const stdRes = {
-        status: 200,
-        statusText: "OK",
-        headers,
-        body
       };
       const response = new Response(body, {
         headers: {

@@ -32,7 +32,6 @@ const { BlindRSAMode, Issuer, TokenRequest } = publicVerif;
 
 import { shouldRotateKey, shouldClearKey } from './utils/keyRotation';
 import { WorkerEntrypoint } from 'cloudflare:workers';
-import { MyResponse, ResponseFactory, StandardResponse } from './utils/jsonResponse'; // todo rename json file as it is misleading
 
 const keyToTokenKeyID = async (key: Uint8Array): Promise<number> => {
 	const hash = await crypto.subtle.digest('SHA-256', key);
@@ -65,38 +64,10 @@ export class SumService extends WorkerEntrypoint<Bindings> {
 			this.ctx
 		);
 
-		return new Response("Hello from pp-issuer");
 	}
 
 	async add(a: number, b: number) {
 		return a + b;
-	}
-
-	async handleRCPTest(ctx: Context, request: Request, isRCP?: boolean): Promise<StandardResponse> {
-		// async handleRCPTest(ctx: Context, request: Request, isRCP?: boolean): Promise<StandardResponse> {
-
-		const resObj: StandardResponse = {
-			status: 200,
-			statusText: "OK",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify({ message: "Hello World :)" }),
-			// body: "Hello World :)",
-		};
-
-		return resObj;
-	}
-
-
-
-	async handleRCPTestiResp(): Promise<MyResponse> {
-		// Construct a real Response object (structured cloneable)
-		// Declare myResponse type
-		return {
-			status: 200,
-			message: "OK",
-			body: "Hello World :)",
-			headers: { "content-type": "application/json" },
-		};
 	}
 }
 
@@ -265,15 +236,6 @@ export class IssuerHandler extends WorkerEntrypoint<Bindings> {
 			'date': new Date().toUTCString(),
 			etag,
 		};
-
-		const stdRes: StandardResponse = {
-			status: 200,
-			statusText: 'OK',
-			headers,
-			body,
-		}
-
-		// return ResponseFactory.createResponse(stdRes, true, ctx, isRCP);
 
 		const response = new Response(body, {
 			headers: {

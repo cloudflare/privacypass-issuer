@@ -2,12 +2,9 @@
 import { Bindings } from './bindings';
 import { Context } from './context';
 import { WorkerEntrypoint } from 'cloudflare:workers';
-import { MyResponse, StandardResponse } from './utils/jsonResponse';
 export declare class SumService extends WorkerEntrypoint<Bindings> {
     fetch(request: Request): Promise<Response>;
     add(a: number, b: number): Promise<number>;
-    handleRCPTest(ctx: Context, request: Request, isRCP?: boolean): Promise<StandardResponse>;
-    handleRCPTestiResp(): Promise<MyResponse>;
 }
 export declare class IssuerHandler extends WorkerEntrypoint<Bindings> {
     handleTokenRequest: (ctx: Context, request: Request) => Promise<Response>;

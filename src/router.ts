@@ -8,7 +8,6 @@ import { ConsoleLogger, FlexibleLogger, Logger } from './context/logging';
 import { MetricsRegistry } from './context/metrics';
 import { MethodNotAllowedError, PageNotFoundError, handleError, HTTPError } from './errors';
 import { WshimLogger } from './context/logging';
-import { StandardResponse } from './utils/jsonResponse'; // todo rename json file as it is misleading
 
 export const HttpMethod = {
 	DELETE: 'DELETE',
@@ -25,13 +24,6 @@ export type ExportedHandlerFetchHandler = (
 	request: Request,
 	isRCP?: boolean
 ) => Response | Promise<Response>;
-// ) => Response | Promise<Response | StandardResponse>;
-
-// export type ExportedHandlerFetchHandler = (
-// 	ctx: Context,
-// 	request: Request,
-// 	isRCP?: boolean
-// ) => Response | Promise<Response>;
 
 export type HttpMethod = (typeof HttpMethod)[keyof typeof HttpMethod];
 
@@ -77,8 +69,6 @@ export class Router {
 				ctx: Context,
 				request: Request
 			): Promise<Response> => {
-				// here we will be calling "testRCPBidning from pp-proxy"
-				// so testRCPBinding should return a Response
 				const response = await handler(ctx, request) as Response;
 				if (response.ok) {
 					return new Response(null, response);
@@ -159,11 +149,9 @@ export class Router {
 		// check if there exist a handler for the specific method and path.
 		// first filtering by method, then checking the path.
 		// dev: if there needs to be argument-in-path down the line, this is where the context would be built and validated
-		let response: Response | StandardResponse;
+		let response: Response;
 		try {
 			const handlers = this.handlers[request.method as HttpMethod];
-			console.log("path is: ", path);
-
 
 			if (!handlers) {
 				throw new MethodNotAllowedError();
@@ -171,7 +159,6 @@ export class Router {
 			if (!(path in handlers)) {
 				throw new PageNotFoundError();
 			}
-			// returning as response here might be causing the issue as the handler should return a StandardResponse to rcp and rcp is using this router 
 			// response = await handlers[path](ctx, request) as Response;
 			// print the type of response
 
