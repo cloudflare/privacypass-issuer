@@ -229,14 +229,6 @@ export class IssuerHandler extends WorkerEntrypoint<Bindings> {
 		);
 		const etag = `"${hexEncode(digest)}"`;
 
-		const headers = {
-			'content-type': MediaType.PRIVATE_TOKEN_ISSUER_DIRECTORY,
-			'cache-control': `public, max-age=${ctx.env.DIRECTORY_CACHE_MAX_AGE_SECONDS}`,
-			'content-length': body.length.toString(),
-			'date': new Date().toUTCString(),
-			etag,
-		};
-
 		const response = new Response(body, {
 			headers: {
 				'content-type': MediaType.PRIVATE_TOKEN_ISSUER_DIRECTORY,
