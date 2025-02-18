@@ -1,24 +1,3 @@
-// {
-// 	"compilerOptions": {
-// 		"noEmit": false, // Allow TypeScript to generate output files
-// 		"declaration": true, // Generate .d.ts files
-// 		// "emitDeclarationOnly": true, // Only emit type declarations, this is if we use IContext, to use Router, Context, etc we need the actual code
-// 		"emitDeclarationOnly": false,
-// 		"declarationDir": "./dist/types", // Store .d.ts files in dist/types
-// 		"outDir": "./dist", // Store output files in dist
-// 		"module": "esnext",
-// 		"target": "es2020",
-// 		"lib": ["es2020"],
-// 		"strict": true,
-// 		"preserveConstEnums": true,
-// 		"moduleResolution": "node",
-// 		"sourceMap": true,
-// 		"types": ["@cloudflare/workers-types"],
-// 		"esModuleInterop": true
-// 	},
-// 	"include": ["src"],
-// 	"exclude": ["node_modules", "dist", "test"]
-// }
 {
 	"compilerOptions": {
 		"noEmit": false, // Allow TypeScript to generate output files
@@ -27,25 +6,15 @@
 		"outDir": "./dist", // Store output files in dist
 		"module": "esnext",
 		"target": "es2020",
-		"lib": [
-			"es2020"
-		],
+		"lib": ["es2020"],
 		"strict": true,
 		"preserveConstEnums": true,
 		"moduleResolution": "node",
 		"rootDir": "src", // ensure import stay relative
 		"sourceMap": true,
-		"types": [
-			"@cloudflare/workers-types"
-		],
+		"types": ["@cloudflare/workers-types"],
 		"esModuleInterop": true
 	},
-	"include": [
-		"src"
-	],
-	"exclude": [
-		"node_modules",
-		"dist",
-		"test"
-	]
+	"include": ["src"],
+	"exclude": ["node_modules", "dist", "test"]
 }

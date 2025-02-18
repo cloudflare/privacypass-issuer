@@ -8,7 +8,7 @@ export declare const HttpMethod: {
     readonly POST: "POST";
     readonly PUT: "PUT";
 };
-export type ExportedHandlerFetchHandler = (ctx: Context, request: Request, isRCP?: boolean) => Response | Promise<Response>;
+export type ExportedHandlerFetchHandler = (ctx: Context, request: Request) => Response | Promise<Response>;
 export type HttpMethod = (typeof HttpMethod)[keyof typeof HttpMethod];
 export declare class Router {
     private handlers;

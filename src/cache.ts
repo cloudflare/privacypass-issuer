@@ -109,12 +109,11 @@ export function shouldRevalidate(expirationDate: Date): boolean {
 export class InMemoryCryptoKeyCache {
 	private static store: Map<string, CacheElement<CryptoKey>> = new Map();
 
-	constructor(private ctx: Context) {}
+	constructor(private ctx: Context) { }
 
-	// The read method tries to retrieve the cached value, refresh it if necessary, and return the cached or refreshed value
 	async read(
 		key: string,
-		setValFn: (key: string) => Promise<CacheElement<CryptoKey>> // Function that represents the logic to populate the cache if it's a cache miss or needs to be refreshed (stale)
+		setValFn: (key: string) => Promise<CacheElement<CryptoKey>>
 	): Promise<CryptoKey> {
 		const refreshCache = async () => {
 			const val = await setValFn(key);
@@ -147,7 +146,7 @@ export class InMemoryCryptoKeyCache {
 export class InMemoryCache implements ReadableCache {
 	private static store: Map<string, CacheElement<string>> = new Map();
 
-	constructor(private ctx: Context) {}
+	constructor(private ctx: Context) { }
 
 	async read<T>(key: string, setValFn: (key: string) => Promise<CacheElement<T>>): Promise<T> {
 		const refreshCache = async () => {
@@ -183,7 +182,7 @@ export class APICache implements ReadableCache {
 	constructor(
 		private ctx: Context,
 		private cacheKey: string
-	) {}
+	) { }
 
 	async read<T>(key: string, setValFn: (key: string) => Promise<CacheElement<T>>): Promise<T> {
 		const cache = await caches.open(this.cacheKey);

@@ -19,12 +19,7 @@ export const HttpMethod = {
 
 
 // TODO: We could have a "Response" factory that allows us to return responses with a more sophisticated structure.
-export type ExportedHandlerFetchHandler = (
-	ctx: Context,
-	request: Request,
-	isRCP?: boolean
-) => Response | Promise<Response>;
-
+export type ExportedHandlerFetchHandler = (ctx: Context, request: Request) => Response | Promise<Response>;
 export type HttpMethod = (typeof HttpMethod)[keyof typeof HttpMethod];
 
 // Simple router
@@ -51,7 +46,6 @@ export class Router {
 		path: string,
 		handler: ExportedHandlerFetchHandler
 	): Router {
-		console.log("registering methods and paths");
 		// if handlers for method is not defined, initialise it.
 		this.handlers[method] ??= {};
 
@@ -69,7 +63,7 @@ export class Router {
 				ctx: Context,
 				request: Request
 			): Promise<Response> => {
-				const response = await handler(ctx, request) as Response;
+				const response = await handler(ctx, request);
 				if (response.ok) {
 					return new Response(null, response);
 				}
@@ -152,28 +146,13 @@ export class Router {
 		let response: Response;
 		try {
 			const handlers = this.handlers[request.method as HttpMethod];
-
 			if (!handlers) {
 				throw new MethodNotAllowedError();
 			}
 			if (!(path in handlers)) {
 				throw new PageNotFoundError();
 			}
-			// response = await handlers[path](ctx, request) as Response;
-			// print the type of response
-
-			// check if handlers is empty
-			const isEmpty = Object.keys(handlers).every(key => Object.keys(handlers[key]).length === 0);
-
-			if (isEmpty) {
-				console.log("handlers is fully empty");
-			} else {
-				console.log("handlers has non-empty items");
-			}
-
-
 			response = await handlers[path](ctx, request);
-			console.log("The type of response is: ", typeof response);
 		} catch (e: unknown) {
 			let status = 500;
 			if (e instanceof HTTPError) {

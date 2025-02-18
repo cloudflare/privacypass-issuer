@@ -19025,7 +19025,6 @@ var InMemoryCryptoKeyCache = class _InMemoryCryptoKeyCache {
   static {
     this.store = /* @__PURE__ */ new Map();
   }
-  // The read method tries to retrieve the cached value, refresh it if necessary, and return the cached or refreshed value
   async read(key, setValFn) {
     const refreshCache = async () => {
       const val = await setValFn(key);
@@ -25029,7 +25028,7 @@ async function handleError(ctx, error, labels) {
   console.error(error.stack);
   ctx.metrics.erroredRequestsTotal.inc({
     ...labels,
-    version: ctx.env.VERSION_METADATA.id ?? "privacy-pass-issuer@v0.1.0.next-dev+8e46885"
+    version: ctx.env.VERSION_METADATA.id ?? "privacy-pass-issuer@v0.1.0.next-dev+e4e8c0c"
   });
   const status = error.status ?? 500;
   const message = error.message || "Server Error";
@@ -25151,7 +25150,6 @@ var Router = class {
   }
   // Register a handler for a specific path on the router
   registerMethod(method, path, handler2) {
-    console.log("registering methods and paths");
     this.handlers[method] ??= {};
     if (path in this.handlers[method]) {
       throw new Error(`path '${path}' already exists`);
@@ -25202,7 +25200,7 @@ var Router = class {
         dsn: env.SENTRY_DSN,
         accessClientId: env.SENTRY_ACCESS_CLIENT_ID,
         accessClientSecret: env.SENTRY_ACCESS_CLIENT_SECRET,
-        release: "privacy-pass-issuer@v0.1.0.next-dev+8e46885",
+        release: "privacy-pass-issuer@v0.1.0.next-dev+e4e8c0c",
         service: env.SERVICE,
         sampleRate: sentrySampleRate,
         coloName: request?.cf?.colo
@@ -25230,14 +25228,7 @@ var Router = class {
       if (!(path in handlers2)) {
         throw new PageNotFoundError();
       }
-      const isEmpty = Object.keys(handlers2).every((key) => Object.keys(handlers2[key]).length === 0);
-      if (isEmpty) {
-        console.log("handlers is fully empty");
-      } else {
-        console.log("handlers has non-empty items");
-      }
       response = await handlers2[path](ctx, request);
-      console.log("The type of response is: ", typeof response);
     } catch (e) {
       let status = 500;
       if (e instanceof HTTPError) {
@@ -25295,12 +25286,258 @@ var keyToTokenKeyID = async (key) => {
   const u8 = new Uint8Array(hash);
   return u8[u8.length - 1];
 };
-var SumService = class extends WorkerEntrypoint {
+var handleTokenRequest = async (ctx, request) => {
+  ctx.metrics.issuanceRequestTotal.inc({ version: ctx.env.VERSION_METADATA.id ?? "privacy-pass-issuer@v0.1.0.next-dev+e4e8c0c" });
+  const contentType = request.headers.get("content-type");
+  if (!contentType || contentType !== MediaType.PRIVATE_TOKEN_REQUEST) {
+    throw new HeaderNotDefinedError(`"Content-Type" must be "${MediaType.PRIVATE_TOKEN_REQUEST}"`);
+  }
+  const buffer = await request.arrayBuffer();
+  const tokenRequest = TokenRequest2.deserialize(new Uint8Array(buffer));
+  if (tokenRequest.tokenType !== TOKEN_TYPES.BLIND_RSA.value) {
+    throw new InvalidTokenTypeError();
+  }
+  const keyID = tokenRequest.truncatedTokenKeyId.toString();
+  const key = await ctx.bucket.ISSUANCE_KEYS.get(keyID);
+  if (key === null) {
+    ctx.metrics.issuanceKeyErrorTotal.inc({ key_id: keyID, type: KeyError.NOT_FOUND });
+    throw new BadTokenKeyRequestedError("No key found for the requested key id");
+  }
+  const CRYPTO_KEY_EXPIRATION_IN_MS = 3e5;
+  const cryptoKeyCache = new InMemoryCryptoKeyCache(ctx);
+  const sk = await cryptoKeyCache.read(`sk-${keyID}`, async (keyID2) => {
+    const privateKey = key.data;
+    if (privateKey === void 0) {
+      ctx.metrics.issuanceKeyErrorTotal.inc({ key_id: keyID2, type: KeyError.MISSING_PRIVATE_KEY });
+      throw new Error("No private key found for the requested key id");
+    }
+    let sk2;
+    try {
+      sk2 = await crypto.subtle.importKey(
+        "pkcs8",
+        privateKey,
+        {
+          name: ctx.isTest() ? "RSA-PSS" : "RSA-RAW",
+          hash: "SHA-384",
+          length: 2048
+        },
+        true,
+        ["sign"]
+      );
+    } catch (e) {
+      ctx.metrics.issuanceKeyErrorTotal.inc({ key_id: keyID2, type: KeyError.INVALID_PRIVATE_KEY });
+      throw e;
+    }
+    return {
+      value: sk2,
+      expiration: new Date(Date.now() + CRYPTO_KEY_EXPIRATION_IN_MS)
+    };
+  });
+  const pk = await cryptoKeyCache.read(`pk-${keyID}`, async (keyID2) => {
+    const pkEnc = key?.customMetadata?.publicKey;
+    if (!pkEnc) {
+      ctx.metrics.issuanceKeyErrorTotal.inc({ key_id: keyID2, type: KeyError.MISSING_PUBLIC_KEY });
+      throw new Error("No public key found for the requested key id");
+    }
+    const pk2 = await crypto.subtle.importKey(
+      "spki",
+      util.convertRSASSAPSSToEnc(b64Tou8(b64URLtoB64(pkEnc))),
+      { name: "RSA-PSS", hash: "SHA-384" },
+      true,
+      ["verify"]
+    );
+    return {
+      value: pk2,
+      expiration: new Date(Date.now() + CRYPTO_KEY_EXPIRATION_IN_MS)
+    };
+  });
+  const domain = new URL(request.url).host;
+  const issuer = new Issuer2(BlindRSAMode2.PSS, domain, sk, pk, { supportsRSARAW: true });
+  const signedToken = await issuer.issue(tokenRequest);
+  ctx.metrics.signedTokenTotal.inc({ key_id: keyID });
+  return new Response(signedToken.serialize(), {
+    headers: { "content-type": MediaType.PRIVATE_TOKEN_RESPONSE }
+  });
+};
+var handleHeadTokenDirectory = async (ctx, request) => {
+  const getResponse = await handleTokenDirectory(ctx, request);
+  return new Response(void 0, {
+    status: getResponse.status,
+    headers: getResponse.headers
+  });
+};
+var IssuerService = class extends WorkerEntrypoint {
+  async tokenDirectory(request, url) {
+    const response = await handleTokenDirectoryRCP(request);
+    return response;
+  }
+};
+var handleTokenDirectoryRCP = (request) => {
+  const directory = {
+    "issuer-request-uri": "/token-request",
+    "token-keys": [
+      {
+        "token-type": 2 /* BlindRSA */,
+        "token-key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA7dHT5WwGpD5tZAkHqT9w9cqgMNwHbflVz1AeTzZnShqaEgLXWz0mO0hJzwOaCikX5Rbzfzp47Bdm9HoxpewIdR8waIdlgSkgDrCll+J7hxwRfj34t7lk8MIZ0JldwqvWxCvgDTNeYs2X8M6n2au0Zm9l8FqgAg0JHquA5xOK9hApmgZcRe+LRQbSx9aUn8o9bbtWbeW81u71UWx4s77CGaBR2jFZ8gVltLqg6D6wOVmvvXjJ/5rF2wM8IfBMCfM1v6A9kAFH2wsLB8Zk2Ro4F1ly9hkgcz56iED34gBGzoF0ql3+q7HBRcLa6pK8lRFE7HkcTqVq6K3OQgqQJK9jeVSK+J8e2IVUQ1dLQnlgXQOyQhbwXyyH9gbF9XtL7UqBwG3RrkNK9BOwr6lOlWwHj5Kl4sFW8FmrIuAVnq5JhYgD7w==",
+        "token-key-legacy": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA7dHT5WwGpD5tZAkHqT9w9cqgMNwHbflVz1AeTzZnShqaEgLXWz0mO0hJzwOaCikX5Rbzfzp47Bdm9HoxpewIdR8waIdlgSkgDrCll+J7hxwRfj34t7lk8MIZ0JldwqvWxCvgDTNeYs2X8M6n2au0Zm9l8FqgAg0JHquA5xOK9hApmgZcRe+LRQbSx9aUn8o9bbtWbeW81u71UWx4s77CGaBR2jFZ8gVltLqg6D6wOVmvvXjJ/5rF2wM8IfBMCfM1v6A9kAFH2wsLB8Zk2Ro4F1ly9hkgcz56iED34gBGzoF0ql3+q7HBRcLa6pK8lRFE7HkcTqVq6K3OQgqQJK9jeVSK+J8e2IVUQ1dLQnlgXQOyQhbwXyyH9gbF9XtL7UqBwG3RrkNK9BOwr6lOlWwHj5Kl4sFW8FmrIuAVnq5JhYgD7w==",
+        "not-before": 1685083200
+      },
+      {
+        "token-type": 2 /* BlindRSA */,
+        "token-key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA7dHT5WwGpD5tZAkHqT9w9cqgMNwHbflVz1AeTzZnShqaEgLXWz0mO0hJzwOaCikX5Rbzfzp47Bdm9HoxpewIdR8waIdlgSkgDrCll+J7hxwRfj34t7lk8MIZ0JldwqvWxCvgDTNeYs2X8M6n2au0Zm9l8FqgAg0JHquA5xOK9hApmgZcRe+LRQbSx9aUn8o9bbtWbeW81u71UWx4s77CGaBR2jFZ8gVltLqg6D6wOVmvvXjJ/5rF2wM8IfBMCfM1v6A9kAFH2wsLB8Zk2Ro4F1ly9hkgcz56iED34gBGzoF0ql3+q7HBRcLa6pK8lRFE7HkcTqVq6K3OQgqQJK9jeVSK+J8e2IVUQ1dLQnlgXQOyQhbwXyyH9gbF9XtL7UqBwG3RrkNK9BOwr6lOlWwHj5Kl4sFW8FmrIuAVnq5JhYgD7w==",
+        "not-before": 1685169600
+      }
+    ]
+  };
+  return directory;
+};
+var handleTokenDirectory = async (ctx, request) => {
+  const cache = await getDirectoryCache();
+  let cachedResponse;
+  try {
+    cachedResponse = await cache.match(DIRECTORY_CACHE_REQUEST(ctx.hostname));
+  } catch (e) {
+    const err = e;
+    throw new InternalCacheError(err.message);
+  }
+  if (cachedResponse) {
+    if (request.headers.get("if-none-match") === cachedResponse.headers.get("etag")) {
+      return new Response(void 0, {
+        status: 304,
+        headers: cachedResponse.headers
+      });
+    }
+    return cachedResponse;
+  }
+  ctx.metrics.directoryCacheMissTotal.inc();
+  const keyList = await ctx.bucket.ISSUANCE_KEYS.list({ include: ["customMetadata"] });
+  if (keyList.objects.length === 0) {
+    throw new Error("Issuer not initialised");
+  }
+  const freshestKeyCount = Number.parseInt(ctx.env.MINIMUM_FRESHEST_KEYS);
+  const keys = keyList.objects.sort((a, b) => new Date(b.uploaded).getTime() - new Date(a.uploaded).getTime()).slice(0, freshestKeyCount);
+  const directory = {
+    "issuer-request-uri": "/token-request",
+    "token-keys": keys.map((key) => ({
+      "token-type": 2 /* BlindRSA */,
+      "token-key": key.customMetadata.publicKey,
+      "not-before": Number.parseInt(
+        key.customMetadata.notBefore ?? (new Date(key.uploaded).getTime() / 1e3).toFixed(0)
+      )
+    }))
+  };
+  const body = JSON.stringify(directory);
+  const digest = new Uint8Array(
+    await crypto.subtle.digest("SHA-256", new TextEncoder().encode(body))
+  );
+  const etag = `"${hexEncode(digest)}"`;
+  const response = new Response(body, {
+    headers: {
+      "content-type": MediaType.PRIVATE_TOKEN_ISSUER_DIRECTORY,
+      "cache-control": `public, max-age=${ctx.env.DIRECTORY_CACHE_MAX_AGE_SECONDS}`,
+      "content-length": body.length.toString(),
+      "date": (/* @__PURE__ */ new Date()).toUTCString(),
+      etag
+    }
+  });
+  const toCacheResponse = response.clone();
+  const cacheTime = Math.floor(
+    Number.parseInt(ctx.env.DIRECTORY_CACHE_MAX_AGE_SECONDS) * (0.7 + 0.3 * Math.random())
+  ).toFixed(0);
+  toCacheResponse.headers.set("cache-control", `public, max-age=${cacheTime}`);
+  ctx.waitUntil(cache.put(DIRECTORY_CACHE_REQUEST(ctx.hostname), toCacheResponse));
+  return response;
+};
+var handleRotateKey = async (ctx, _request) => {
+  ctx.metrics.keyRotationTotal.inc();
+  let publicKeyEnc;
+  let tokenKeyID;
+  let privateKey;
+  do {
+    const keypair = await crypto.subtle.generateKey(
+      {
+        name: "RSA-PSS",
+        modulusLength: 2048,
+        publicExponent: new Uint8Array([1, 0, 1]),
+        hash: { name: "SHA-384" }
+      },
+      true,
+      ["sign", "verify"]
+    );
+    const publicKey = new Uint8Array(
+      await crypto.subtle.exportKey("spki", keypair.publicKey)
+    );
+    const rsaSsaPssPublicKey = util.convertEncToRSASSAPSS(publicKey);
+    publicKeyEnc = b64ToB64URL(u8ToB64(rsaSsaPssPublicKey));
+    tokenKeyID = await keyToTokenKeyID(rsaSsaPssPublicKey);
+    privateKey = await crypto.subtle.exportKey("pkcs8", keypair.privateKey);
+  } while (await ctx.bucket.ISSUANCE_KEYS.head(tokenKeyID.toString()) !== null);
+  const metadata = {
+    notBefore: ((Date.now() + Number.parseInt(ctx.env.KEY_NOT_BEFORE_DELAY_IN_MS)) / 1e3).toFixed(
+      0
+    ),
+    // the spec mandates to use seconds
+    publicKey: publicKeyEnc,
+    tokenKeyID: tokenKeyID.toString()
+  };
+  await ctx.bucket.ISSUANCE_KEYS.put(tokenKeyID.toString(), privateKey, {
+    customMetadata: metadata
+  });
+  ctx.waitUntil(clearDirectoryCache(ctx));
+  ctx.wshimLogger.log(`Key rotated successfully, new key ${tokenKeyID}`);
+  return new Response(`New key ${publicKeyEnc}`, { status: 201 });
+};
+var handleClearKey = async (ctx, _request) => {
+  ctx.metrics.keyClearTotal.inc();
+  const keys = await ctx.bucket.ISSUANCE_KEYS.list({ shouldUseCache: false });
+  if (keys.objects.length === 0) {
+    return new Response("No keys to clear", { status: 201 });
+  }
+  const lifespanInMs = Number.parseInt(ctx.env.KEY_LIFESPAN_IN_MS);
+  const freshestKeyCount = Number.parseInt(ctx.env.MINIMUM_FRESHEST_KEYS);
+  keys.objects.sort((a, b) => new Date(b.uploaded).getTime() - new Date(a.uploaded).getTime());
+  const toDelete = /* @__PURE__ */ new Set();
+  for (let i = 0; i < keys.objects.length; i++) {
+    const key = keys.objects[i];
+    const notBefore = key.customMetadata?.notBefore;
+    let keyNotBefore;
+    if (notBefore) {
+      keyNotBefore = new Date(Number.parseInt(notBefore) * 1e3);
+    } else {
+      keyNotBefore = new Date(key.uploaded);
+    }
+    const isFreshest = i < freshestKeyCount;
+    if (isFreshest) {
+      continue;
+    }
+    const shouldDelete = shouldClearKey(keyNotBefore, lifespanInMs);
+    if (shouldDelete) {
+      toDelete.add(key.key);
+    }
+  }
+  const toDeleteArray = [...toDelete];
+  if (toDeleteArray.length > 0) {
+    ctx.wshimLogger.log(`
+Keys cleared: ${toDeleteArray.join("\n")}`);
+  } else {
+    ctx.wshimLogger.log("\nNo keys were cleared.");
+  }
+  await ctx.bucket.ISSUANCE_KEYS.delete(toDeleteArray);
+  ctx.waitUntil(clearDirectoryCache(ctx));
+  return new Response(`Keys cleared: ${toDeleteArray.join("\n")}`, { status: 201 });
+};
+var VALID_PATHS = /* @__PURE__ */ new Set([
+  "/.well-known/token-issuer-directory",
+  "/token-request",
+  "/admin/rotate",
+  "/admin/clear",
+  "/",
+  PRIVATE_TOKEN_ISSUER_DIRECTORY
+]);
+var IssuerHandler = class extends WorkerEntrypoint {
   async fetch(request) {
-    console.log("inside fetch of the SumService");
     const router = new Router(VALID_PATHS);
-    const issuer = new IssuerHandler(this.ctx, this.env);
-    router.get(PRIVATE_TOKEN_ISSUER_DIRECTORY, issuer.handleTokenDirectory).post("/token-request", issuer.handleTokenRequest).post("/admin/rotate", issuer.handleRotateKey).post("/admin/clear", issuer.handleClearKey);
+    router.get(PRIVATE_TOKEN_ISSUER_DIRECTORY, handleTokenDirectory).post("/token-request", handleTokenRequest).post("/admin/rotate", handleRotateKey).post("/admin/clear", handleClearKey);
     return router.handle(
       request,
       this.env,
@@ -25311,254 +25548,10 @@ var SumService = class extends WorkerEntrypoint {
     return a + b;
   }
 };
-var IssuerHandler = class extends WorkerEntrypoint {
-  constructor() {
-    super(...arguments);
-    this.handleTokenRequest = async (ctx, request) => {
-      ctx.metrics.issuanceRequestTotal.inc({ version: ctx.env.VERSION_METADATA.id ?? "privacy-pass-issuer@v0.1.0.next-dev+8e46885" });
-      const contentType = request.headers.get("content-type");
-      if (!contentType || contentType !== MediaType.PRIVATE_TOKEN_REQUEST) {
-        throw new HeaderNotDefinedError(`"Content-Type" must be "${MediaType.PRIVATE_TOKEN_REQUEST}"`);
-      }
-      const buffer = await request.arrayBuffer();
-      const tokenRequest = TokenRequest2.deserialize(new Uint8Array(buffer));
-      if (tokenRequest.tokenType !== TOKEN_TYPES.BLIND_RSA.value) {
-        throw new InvalidTokenTypeError();
-      }
-      const keyID = tokenRequest.truncatedTokenKeyId.toString();
-      const key = await ctx.bucket.ISSUANCE_KEYS.get(keyID);
-      if (key === null) {
-        ctx.metrics.issuanceKeyErrorTotal.inc({ key_id: keyID, type: KeyError.NOT_FOUND });
-        throw new BadTokenKeyRequestedError("No key found for the requested key id");
-      }
-      const CRYPTO_KEY_EXPIRATION_IN_MS = 3e5;
-      const cryptoKeyCache = new InMemoryCryptoKeyCache(ctx);
-      const sk = await cryptoKeyCache.read(`sk-${keyID}`, async (keyID2) => {
-        const privateKey = key.data;
-        if (privateKey === void 0) {
-          ctx.metrics.issuanceKeyErrorTotal.inc({ key_id: keyID2, type: KeyError.MISSING_PRIVATE_KEY });
-          throw new Error("No private key found for the requested key id");
-        }
-        let sk2;
-        try {
-          sk2 = await crypto.subtle.importKey(
-            "pkcs8",
-            privateKey,
-            {
-              name: ctx.isTest() ? "RSA-PSS" : "RSA-RAW",
-              hash: "SHA-384",
-              length: 2048
-            },
-            true,
-            ["sign"]
-          );
-        } catch (e) {
-          ctx.metrics.issuanceKeyErrorTotal.inc({ key_id: keyID2, type: KeyError.INVALID_PRIVATE_KEY });
-          throw e;
-        }
-        return {
-          value: sk2,
-          expiration: new Date(Date.now() + CRYPTO_KEY_EXPIRATION_IN_MS)
-        };
-      });
-      const pk = await cryptoKeyCache.read(`pk-${keyID}`, async (keyID2) => {
-        const pkEnc = key?.customMetadata?.publicKey;
-        if (!pkEnc) {
-          ctx.metrics.issuanceKeyErrorTotal.inc({ key_id: keyID2, type: KeyError.MISSING_PUBLIC_KEY });
-          throw new Error("No public key found for the requested key id");
-        }
-        const pk2 = await crypto.subtle.importKey(
-          "spki",
-          util.convertRSASSAPSSToEnc(b64Tou8(b64URLtoB64(pkEnc))),
-          { name: "RSA-PSS", hash: "SHA-384" },
-          true,
-          ["verify"]
-        );
-        return {
-          value: pk2,
-          expiration: new Date(Date.now() + CRYPTO_KEY_EXPIRATION_IN_MS)
-        };
-      });
-      const domain = new URL(request.url).host;
-      const issuer = new Issuer2(BlindRSAMode2.PSS, domain, sk, pk, { supportsRSARAW: true });
-      const signedToken = await issuer.issue(tokenRequest);
-      ctx.metrics.signedTokenTotal.inc({ key_id: keyID });
-      return new Response(signedToken.serialize(), {
-        headers: { "content-type": MediaType.PRIVATE_TOKEN_RESPONSE }
-      });
-    };
-    this.handleHeadTokenDirectory = async (ctx, request) => {
-      const getResponse = await this.handleTokenDirectory(ctx, request);
-      return new Response(void 0, {
-        status: getResponse.status,
-        headers: getResponse.headers
-      });
-    };
-    // need to have the isRCP in case the handler is called via RCP, this flag is set to false when the method is registered in the router
-    // could this be a problem later as the flag is set to false in the path as well in the proxy code? 
-    this.handleTokenDirectory = async (ctx, request, isRCP) => {
-      const cache = await getDirectoryCache();
-      let cachedResponse;
-      try {
-        cachedResponse = await cache.match(DIRECTORY_CACHE_REQUEST(ctx.hostname));
-      } catch (e) {
-        const err = e;
-        throw new InternalCacheError(err.message);
-      }
-      if (cachedResponse) {
-        if (request.headers.get("if-none-match") === cachedResponse.headers.get("etag")) {
-          return new Response(void 0, {
-            status: 304,
-            headers: cachedResponse.headers
-          });
-        }
-        return cachedResponse;
-      }
-      ctx.metrics.directoryCacheMissTotal.inc();
-      const keyList = await ctx.bucket.ISSUANCE_KEYS.list({ include: ["customMetadata"] });
-      if (keyList.objects.length === 0) {
-        throw new Error("Issuer not initialised");
-      }
-      const freshestKeyCount = Number.parseInt(ctx.env.MINIMUM_FRESHEST_KEYS);
-      const keys = keyList.objects.sort((a, b) => new Date(b.uploaded).getTime() - new Date(a.uploaded).getTime()).slice(0, freshestKeyCount);
-      const directory = {
-        "issuer-request-uri": "/token-request",
-        "token-keys": keys.map((key) => ({
-          "token-type": 2 /* BlindRSA */,
-          "token-key": key.customMetadata.publicKey,
-          // this is how to extract the custom metadata
-          "not-before": Number.parseInt(
-            key.customMetadata.notBefore ?? (new Date(key.uploaded).getTime() / 1e3).toFixed(0)
-          )
-        }))
-      };
-      const body = JSON.stringify(directory);
-      const digest = new Uint8Array(
-        await crypto.subtle.digest("SHA-256", new TextEncoder().encode(body))
-      );
-      const etag = `"${hexEncode(digest)}"`;
-      const headers = {
-        "content-type": MediaType.PRIVATE_TOKEN_ISSUER_DIRECTORY,
-        "cache-control": `public, max-age=${ctx.env.DIRECTORY_CACHE_MAX_AGE_SECONDS}`,
-        "content-length": body.length.toString(),
-        "date": (/* @__PURE__ */ new Date()).toUTCString(),
-        etag
-      };
-      const response = new Response(body, {
-        headers: {
-          "content-type": MediaType.PRIVATE_TOKEN_ISSUER_DIRECTORY,
-          "cache-control": `public, max-age=${ctx.env.DIRECTORY_CACHE_MAX_AGE_SECONDS}`,
-          "content-length": body.length.toString(),
-          "date": (/* @__PURE__ */ new Date()).toUTCString(),
-          etag
-        }
-      });
-      const toCacheResponse = response.clone();
-      const cacheTime = Math.floor(
-        Number.parseInt(ctx.env.DIRECTORY_CACHE_MAX_AGE_SECONDS) * (0.7 + 0.3 * Math.random())
-      ).toFixed(0);
-      toCacheResponse.headers.set("cache-control", `public, max-age=${cacheTime}`);
-      ctx.waitUntil(cache.put(DIRECTORY_CACHE_REQUEST(ctx.hostname), toCacheResponse));
-      return response;
-    };
-    this.handleRotateKey = async (ctx, _request) => {
-      ctx.metrics.keyRotationTotal.inc();
-      let publicKeyEnc;
-      let tokenKeyID;
-      let privateKey;
-      do {
-        const keypair = await crypto.subtle.generateKey(
-          {
-            name: "RSA-PSS",
-            modulusLength: 2048,
-            publicExponent: new Uint8Array([1, 0, 1]),
-            hash: { name: "SHA-384" }
-          },
-          true,
-          ["sign", "verify"]
-        );
-        const publicKey = new Uint8Array(
-          await crypto.subtle.exportKey("spki", keypair.publicKey)
-        );
-        const rsaSsaPssPublicKey = util.convertEncToRSASSAPSS(publicKey);
-        publicKeyEnc = b64ToB64URL(u8ToB64(rsaSsaPssPublicKey));
-        tokenKeyID = await keyToTokenKeyID(rsaSsaPssPublicKey);
-        privateKey = await crypto.subtle.exportKey("pkcs8", keypair.privateKey);
-      } while (await ctx.bucket.ISSUANCE_KEYS.head(tokenKeyID.toString()) !== null);
-      const metadata = {
-        notBefore: ((Date.now() + Number.parseInt(ctx.env.KEY_NOT_BEFORE_DELAY_IN_MS)) / 1e3).toFixed(
-          0
-        ),
-        // the spec mandates to use seconds
-        publicKey: publicKeyEnc,
-        tokenKeyID: tokenKeyID.toString()
-      };
-      await ctx.bucket.ISSUANCE_KEYS.put(tokenKeyID.toString(), privateKey, {
-        customMetadata: metadata
-      });
-      ctx.waitUntil(clearDirectoryCache(ctx));
-      ctx.wshimLogger.log(`Key rotated successfully, new key ${tokenKeyID}`);
-      return new Response(`New key ${publicKeyEnc}`, { status: 201 });
-    };
-    this.handleClearKey = async (ctx, _request) => {
-      ctx.metrics.keyClearTotal.inc();
-      const keys = await ctx.bucket.ISSUANCE_KEYS.list({ shouldUseCache: false });
-      if (keys.objects.length === 0) {
-        return new Response("No keys to clear", { status: 201 });
-      }
-      const lifespanInMs = Number.parseInt(ctx.env.KEY_LIFESPAN_IN_MS);
-      const freshestKeyCount = Number.parseInt(ctx.env.MINIMUM_FRESHEST_KEYS);
-      keys.objects.sort((a, b) => new Date(b.uploaded).getTime() - new Date(a.uploaded).getTime());
-      const toDelete = /* @__PURE__ */ new Set();
-      for (let i = 0; i < keys.objects.length; i++) {
-        const key = keys.objects[i];
-        const notBefore = key.customMetadata?.notBefore;
-        let keyNotBefore;
-        if (notBefore) {
-          keyNotBefore = new Date(Number.parseInt(notBefore) * 1e3);
-        } else {
-          keyNotBefore = new Date(key.uploaded);
-        }
-        const isFreshest = i < freshestKeyCount;
-        if (isFreshest) {
-          continue;
-        }
-        const shouldDelete = shouldClearKey(keyNotBefore, lifespanInMs);
-        if (shouldDelete) {
-          toDelete.add(key.key);
-        }
-      }
-      const toDeleteArray = [...toDelete];
-      if (toDeleteArray.length > 0) {
-        ctx.wshimLogger.log(`
-Keys cleared: ${toDeleteArray.join("\n")}`);
-      } else {
-        ctx.wshimLogger.log("\nNo keys were cleared.");
-      }
-      await ctx.bucket.ISSUANCE_KEYS.delete(toDeleteArray);
-      ctx.waitUntil(clearDirectoryCache(ctx));
-      return new Response(`Keys cleared: ${toDeleteArray.join("\n")}`, { status: 201 });
-    };
-  }
-};
-var VALID_PATHS = /* @__PURE__ */ new Set([
-  "/.well-known/token-issuer-directory",
-  "/token-request",
-  "/admin/rotate",
-  "/admin/clear",
-  "/",
-  PRIVATE_TOKEN_ISSUER_DIRECTORY
-]);
 var src_default = {
   async fetch(request, env, ctx) {
-    const router = new Router(VALID_PATHS);
-    const issuer = new IssuerHandler(ctx, env);
-    router.get(PRIVATE_TOKEN_ISSUER_DIRECTORY, issuer.handleTokenDirectory).post("/token-request", issuer.handleTokenRequest).post("/admin/rotate", issuer.handleRotateKey).post("/admin/clear", issuer.handleClearKey);
-    return router.handle(
-      request,
-      env,
-      ctx
-    );
+    const issuerHandler = new IssuerHandler(ctx, env);
+    return issuerHandler.fetch(request);
   },
   async scheduled(event, env, ectx) {
     const sampleRequest = new Request(`https://schedule.example.com`);
@@ -25571,18 +25564,23 @@ var src_default = {
       new WshimLogger(sampleRequest, env)
     );
     const date = new Date(event.scheduledTime);
-    const issuer = new IssuerHandler(ectx, env);
     if (shouldRotateKey(date, env)) {
-      await issuer.handleRotateKey(ctx);
+      await handleRotateKey(ctx);
     } else {
-      await issuer.handleClearKey(ctx);
+      await handleClearKey(ctx);
     }
   }
 };
 export {
   Context,
   IssuerHandler,
+  IssuerService,
   Router,
-  SumService,
-  src_default as default
+  src_default as default,
+  handleClearKey,
+  handleHeadTokenDirectory,
+  handleRotateKey,
+  handleTokenDirectory,
+  handleTokenDirectoryRCP,
+  handleTokenRequest
 };

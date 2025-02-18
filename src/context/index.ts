@@ -6,11 +6,9 @@ import { APICache, CachedR2Bucket, InMemoryCache, CascadingCache } from '../cach
 import { asyncRetries, DEFAULT_RETRIES } from '../utils/promises';
 import { Logger, WshimLogger } from './logging';
 import { MetricsRegistry } from './metrics';
-// import { IContext } from './icontext';
 
 export type WaitUntilFunc = (p: Promise<unknown>) => void;
 
-// export class Context implements IContext {
 export class Context {
 	public hostname: string;
 	public startTime: number;
