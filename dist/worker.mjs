@@ -25028,7 +25028,7 @@ async function handleError(ctx, error, labels) {
   console.error(error.stack);
   ctx.metrics.erroredRequestsTotal.inc({
     ...labels,
-    version: ctx.env.VERSION_METADATA.id ?? "privacy-pass-issuer@v0.1.0.next-dev+e4e8c0c"
+    version: ctx.env.VERSION_METADATA.id ?? "privacy-pass-issuer@v0.1.0.next-dev+ee2e11d"
   });
   const status = error.status ?? 500;
   const message = error.message || "Server Error";
@@ -25139,7 +25139,7 @@ var HttpMethod = {
   POST: "POST",
   PUT: "PUT"
 };
-var Router = class {
+var Router = class _Router {
   constructor(validPaths) {
     this.handlers = {};
     this.validPaths = validPaths;
@@ -25183,7 +25183,8 @@ var Router = class {
   put(path, handler2) {
     return this.registerMethod(HttpMethod.PUT, path, handler2);
   }
-  buildContext(request, env, ectx) {
+  // private buildContext(request: Request, env: Bindings, ectx: ExecutionContext): Context {
+  static buildContext(request, env, ectx) {
     const metrics = new MetricsRegistry(env);
     const wshimLogger = new WshimLogger(request, env);
     let logger2;
@@ -25200,7 +25201,7 @@ var Router = class {
         dsn: env.SENTRY_DSN,
         accessClientId: env.SENTRY_ACCESS_CLIENT_ID,
         accessClientSecret: env.SENTRY_ACCESS_CLIENT_SECRET,
-        release: "privacy-pass-issuer@v0.1.0.next-dev+e4e8c0c",
+        release: "privacy-pass-issuer@v0.1.0.next-dev+ee2e11d",
         service: env.SERVICE,
         sampleRate: sentrySampleRate,
         coloName: request?.cf?.colo
@@ -25215,7 +25216,7 @@ var Router = class {
   }
   // match exact path, and returns a response using the appropriate path handler
   async handle(request, env, ectx) {
-    const ctx = this.buildContext(request, env, ectx);
+    const ctx = _Router.buildContext(request, env, ectx);
     const rawPath = new URL(request.url).pathname;
     const path = this.normalisePath(rawPath);
     ctx.metrics.requestsTotal.inc({ path });
@@ -25287,7 +25288,7 @@ var keyToTokenKeyID = async (key) => {
   return u8[u8.length - 1];
 };
 var handleTokenRequest = async (ctx, request) => {
-  ctx.metrics.issuanceRequestTotal.inc({ version: ctx.env.VERSION_METADATA.id ?? "privacy-pass-issuer@v0.1.0.next-dev+e4e8c0c" });
+  ctx.metrics.issuanceRequestTotal.inc({ version: ctx.env.VERSION_METADATA.id ?? "privacy-pass-issuer@v0.1.0.next-dev+ee2e11d" });
   const contentType = request.headers.get("content-type");
   if (!contentType || contentType !== MediaType.PRIVATE_TOKEN_REQUEST) {
     throw new HeaderNotDefinedError(`"Content-Type" must be "${MediaType.PRIVATE_TOKEN_REQUEST}"`);
@@ -25367,29 +25368,65 @@ var handleHeadTokenDirectory = async (ctx, request) => {
   });
 };
 var IssuerService = class extends WorkerEntrypoint {
-  async tokenDirectory(request, url) {
-    const response = await handleTokenDirectoryRCP(request);
-    return response;
+  async tokenDirectory(request, prefix) {
+    const ctx = Router.buildContext(request, this.env, this.ctx);
+    const jsonTokenResponse = await handleTokenDirectoryTest2(ctx, request, true);
+    return jsonTokenResponse;
   }
 };
-var handleTokenDirectoryRCP = (request) => {
+var handleTokenDirectoryTest2 = async (ctx, request, isRCP = false) => {
+  const cache = await getDirectoryCache();
+  let cachedResponse;
+  try {
+    cachedResponse = await cache.match(DIRECTORY_CACHE_REQUEST(ctx.hostname));
+  } catch (e) {
+    const err = e;
+    throw new InternalCacheError(err.message);
+  }
+  ctx.metrics.directoryCacheMissTotal.inc();
+  const keyList = await ctx.bucket.ISSUANCE_KEYS.list({ include: ["customMetadata"] });
+  if (keyList.objects.length === 0) {
+    throw new Error("Issuer not initialised");
+  }
+  const freshestKeyCount = Number.parseInt(ctx.env.MINIMUM_FRESHEST_KEYS);
+  const keys = keyList.objects.sort((a, b) => new Date(b.uploaded).getTime() - new Date(a.uploaded).getTime()).slice(0, freshestKeyCount);
   const directory = {
     "issuer-request-uri": "/token-request",
-    "token-keys": [
-      {
-        "token-type": 2 /* BlindRSA */,
-        "token-key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA7dHT5WwGpD5tZAkHqT9w9cqgMNwHbflVz1AeTzZnShqaEgLXWz0mO0hJzwOaCikX5Rbzfzp47Bdm9HoxpewIdR8waIdlgSkgDrCll+J7hxwRfj34t7lk8MIZ0JldwqvWxCvgDTNeYs2X8M6n2au0Zm9l8FqgAg0JHquA5xOK9hApmgZcRe+LRQbSx9aUn8o9bbtWbeW81u71UWx4s77CGaBR2jFZ8gVltLqg6D6wOVmvvXjJ/5rF2wM8IfBMCfM1v6A9kAFH2wsLB8Zk2Ro4F1ly9hkgcz56iED34gBGzoF0ql3+q7HBRcLa6pK8lRFE7HkcTqVq6K3OQgqQJK9jeVSK+J8e2IVUQ1dLQnlgXQOyQhbwXyyH9gbF9XtL7UqBwG3RrkNK9BOwr6lOlWwHj5Kl4sFW8FmrIuAVnq5JhYgD7w==",
-        "token-key-legacy": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA7dHT5WwGpD5tZAkHqT9w9cqgMNwHbflVz1AeTzZnShqaEgLXWz0mO0hJzwOaCikX5Rbzfzp47Bdm9HoxpewIdR8waIdlgSkgDrCll+J7hxwRfj34t7lk8MIZ0JldwqvWxCvgDTNeYs2X8M6n2au0Zm9l8FqgAg0JHquA5xOK9hApmgZcRe+LRQbSx9aUn8o9bbtWbeW81u71UWx4s77CGaBR2jFZ8gVltLqg6D6wOVmvvXjJ/5rF2wM8IfBMCfM1v6A9kAFH2wsLB8Zk2Ro4F1ly9hkgcz56iED34gBGzoF0ql3+q7HBRcLa6pK8lRFE7HkcTqVq6K3OQgqQJK9jeVSK+J8e2IVUQ1dLQnlgXQOyQhbwXyyH9gbF9XtL7UqBwG3RrkNK9BOwr6lOlWwHj5Kl4sFW8FmrIuAVnq5JhYgD7w==",
-        "not-before": 1685083200
-      },
-      {
-        "token-type": 2 /* BlindRSA */,
-        "token-key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA7dHT5WwGpD5tZAkHqT9w9cqgMNwHbflVz1AeTzZnShqaEgLXWz0mO0hJzwOaCikX5Rbzfzp47Bdm9HoxpewIdR8waIdlgSkgDrCll+J7hxwRfj34t7lk8MIZ0JldwqvWxCvgDTNeYs2X8M6n2au0Zm9l8FqgAg0JHquA5xOK9hApmgZcRe+LRQbSx9aUn8o9bbtWbeW81u71UWx4s77CGaBR2jFZ8gVltLqg6D6wOVmvvXjJ/5rF2wM8IfBMCfM1v6A9kAFH2wsLB8Zk2Ro4F1ly9hkgcz56iED34gBGzoF0ql3+q7HBRcLa6pK8lRFE7HkcTqVq6K3OQgqQJK9jeVSK+J8e2IVUQ1dLQnlgXQOyQhbwXyyH9gbF9XtL7UqBwG3RrkNK9BOwr6lOlWwHj5Kl4sFW8FmrIuAVnq5JhYgD7w==",
-        "not-before": 1685169600
-      }
-    ]
+    "token-keys": keys.map((key) => ({
+      "token-type": 2 /* BlindRSA */,
+      "token-key": key.customMetadata.publicKey,
+      "not-before": Number.parseInt(
+        key.customMetadata.notBefore ?? (new Date(key.uploaded).getTime() / 1e3).toFixed(0)
+      )
+    }))
   };
-  return directory;
+  const body = JSON.stringify(directory);
+  const digest = new Uint8Array(
+    await crypto.subtle.digest("SHA-256", new TextEncoder().encode(body))
+  );
+  const etag = `"${hexEncode(digest)}"`;
+  const headers = {
+    "content-type": MediaType.PRIVATE_TOKEN_ISSUER_DIRECTORY,
+    "cache-control": `public, max-age=${ctx.env.DIRECTORY_CACHE_MAX_AGE_SECONDS}`,
+    "content-length": body.length.toString(),
+    "date": (/* @__PURE__ */ new Date()).toUTCString(),
+    etag
+  };
+  const response = new Response(body, { headers });
+  const toCacheResponse = response.clone();
+  const cacheTime = Math.floor(
+    Number.parseInt(ctx.env.DIRECTORY_CACHE_MAX_AGE_SECONDS) * (0.7 + 0.3 * Math.random())
+  ).toFixed(0);
+  toCacheResponse.headers.set("cache-control", `public, max-age=${cacheTime}`);
+  ctx.waitUntil(cache.put(DIRECTORY_CACHE_REQUEST(ctx.hostname), toCacheResponse));
+  if (isRCP) {
+    const res = {
+      responseHeaders: headers,
+      responseBody: directory
+    };
+    return res;
+  }
+  return response;
 };
 var handleTokenDirectory = async (ctx, request) => {
   const cache = await getDirectoryCache();
@@ -25581,6 +25618,6 @@ export {
   handleHeadTokenDirectory,
   handleRotateKey,
   handleTokenDirectory,
-  handleTokenDirectoryRCP,
+  handleTokenDirectoryTest2,
   handleTokenRequest
 };

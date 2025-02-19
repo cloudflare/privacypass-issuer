@@ -14,3 +14,7 @@ export declare enum TokenType {
     RateLimitBlindRSAECDSA = 3,
     RateLimitBlindRSAEd25519 = 4
 }
+export type IssuerResponse = {
+    responseHeaders: {};
+    responseBody: IssuerConfigurationResponse;
+};

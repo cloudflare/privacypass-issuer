@@ -32,6 +32,7 @@ const { BlindRSAMode, Issuer, TokenRequest } = publicVerif;
 
 import { shouldRotateKey, shouldClearKey } from './utils/keyRotation';
 import { WorkerEntrypoint } from 'cloudflare:workers';
+import { IssuerResponse } from './types'
 
 const keyToTokenKeyID = async (key: Uint8Array): Promise<number> => {
 	const hash = await crypto.subtle.digest('SHA-256', key);
@@ -147,34 +148,99 @@ export const handleHeadTokenDirectory = async (ctx: Context, request: Request) =
 };
 
 export class IssuerService extends WorkerEntrypoint<Bindings> {
-	async tokenDirectory(request: Request, url: string): Promise<IssuerConfigurationResponse> {
-		// const ctx = // build context; 
+	async tokenDirectory(request: Request, prefix: string): Promise<IssuerResponse> {
+		const ctx = Router.buildContext(request, this.env, this.ctx);
 
-		const response = await handleTokenDirectoryRCP(request);
-		return response;
+		const jsonTokenResponse = await handleTokenDirectoryTest2(ctx, request, true);
+		return jsonTokenResponse as IssuerResponse;
 	}
 }
 
-export const handleTokenDirectoryRCP = (request: Request) => {
+export const handleTokenDirectoryTest2 = async (ctx: Context, request: Request, isRCP: boolean = false): Promise<Response | IssuerResponse> => {
+	const cache = await getDirectoryCache();
+	let cachedResponse: Response | undefined;
+	try {
+		cachedResponse = await cache.match(DIRECTORY_CACHE_REQUEST(ctx.hostname));
+	} catch (e: unknown) {
+		const err = e as Error;
+		throw new InternalCacheError(err.message);
+	}
+	// if (cachedResponse) {
+	// 	// todo: figure this out
+	// 	if (request.headers.get('if-none-match') === cachedResponse.headers.get('etag')) {
+	// 		return new Response(undefined, {
+	// 			status: 304,
+	// 			headers: cachedResponse.headers,
+	// 		});
+	// 	}
+	// 	return cachedResponse;
+	// }
+
+	ctx.metrics.directoryCacheMissTotal.inc();
+
+	const keyList = await ctx.bucket.ISSUANCE_KEYS.list({ include: ['customMetadata'] });
+
+	if (keyList.objects.length === 0) {
+		throw new Error('Issuer not initialised');
+	}
+
+	// there is no reason for an auditor to continue serving keys beyond the minimum requirement
+	const freshestKeyCount = Number.parseInt(ctx.env.MINIMUM_FRESHEST_KEYS);
+	const keys = keyList.objects
+		.sort((a, b) => new Date(b.uploaded).getTime() - new Date(a.uploaded).getTime())
+		.slice(0, freshestKeyCount);
+
 	const directory: IssuerConfigurationResponse = {
-		"issuer-request-uri": "/token-request",
-		"token-keys": [
-			{
-				"token-type": TokenType.BlindRSA,
-				"token-key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA7dHT5WwGpD5tZAkHqT9w9cqgMNwHbflVz1AeTzZnShqaEgLXWz0mO0hJzwOaCikX5Rbzfzp47Bdm9HoxpewIdR8waIdlgSkgDrCll+J7hxwRfj34t7lk8MIZ0JldwqvWxCvgDTNeYs2X8M6n2au0Zm9l8FqgAg0JHquA5xOK9hApmgZcRe+LRQbSx9aUn8o9bbtWbeW81u71UWx4s77CGaBR2jFZ8gVltLqg6D6wOVmvvXjJ/5rF2wM8IfBMCfM1v6A9kAFH2wsLB8Zk2Ro4F1ly9hkgcz56iED34gBGzoF0ql3+q7HBRcLa6pK8lRFE7HkcTqVq6K3OQgqQJK9jeVSK+J8e2IVUQ1dLQnlgXQOyQhbwXyyH9gbF9XtL7UqBwG3RrkNK9BOwr6lOlWwHj5Kl4sFW8FmrIuAVnq5JhYgD7w==",
-				"token-key-legacy": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA7dHT5WwGpD5tZAkHqT9w9cqgMNwHbflVz1AeTzZnShqaEgLXWz0mO0hJzwOaCikX5Rbzfzp47Bdm9HoxpewIdR8waIdlgSkgDrCll+J7hxwRfj34t7lk8MIZ0JldwqvWxCvgDTNeYs2X8M6n2au0Zm9l8FqgAg0JHquA5xOK9hApmgZcRe+LRQbSx9aUn8o9bbtWbeW81u71UWx4s77CGaBR2jFZ8gVltLqg6D6wOVmvvXjJ/5rF2wM8IfBMCfM1v6A9kAFH2wsLB8Zk2Ro4F1ly9hkgcz56iED34gBGzoF0ql3+q7HBRcLa6pK8lRFE7HkcTqVq6K3OQgqQJK9jeVSK+J8e2IVUQ1dLQnlgXQOyQhbwXyyH9gbF9XtL7UqBwG3RrkNK9BOwr6lOlWwHj5Kl4sFW8FmrIuAVnq5JhYgD7w==",
-				"not-before": 1685083200
-			},
-			{
-				"token-type": TokenType.BlindRSA,
-				"token-key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA7dHT5WwGpD5tZAkHqT9w9cqgMNwHbflVz1AeTzZnShqaEgLXWz0mO0hJzwOaCikX5Rbzfzp47Bdm9HoxpewIdR8waIdlgSkgDrCll+J7hxwRfj34t7lk8MIZ0JldwqvWxCvgDTNeYs2X8M6n2au0Zm9l8FqgAg0JHquA5xOK9hApmgZcRe+LRQbSx9aUn8o9bbtWbeW81u71UWx4s77CGaBR2jFZ8gVltLqg6D6wOVmvvXjJ/5rF2wM8IfBMCfM1v6A9kAFH2wsLB8Zk2Ro4F1ly9hkgcz56iED34gBGzoF0ql3+q7HBRcLa6pK8lRFE7HkcTqVq6K3OQgqQJK9jeVSK+J8e2IVUQ1dLQnlgXQOyQhbwXyyH9gbF9XtL7UqBwG3RrkNK9BOwr6lOlWwHj5Kl4sFW8FmrIuAVnq5JhYgD7w==",
-				"not-before": 1685169600
-			}
-		]
+		'issuer-request-uri': '/token-request',
+		'token-keys': keys.map(key => ({
+			'token-type': TokenType.BlindRSA,
+			'token-key': (key.customMetadata as StorageMetadata).publicKey,
+			'not-before': Number.parseInt(
+				(key.customMetadata as StorageMetadata).notBefore ??
+				(new Date(key.uploaded).getTime() / 1000).toFixed(0)
+			),
+		})),
+	};
+
+	const body = JSON.stringify(directory);
+
+	// if rcp i could return the body here
+	// Ideally i would not replicate the rest of the funciton in pp-proxy
+
+	const digest = new Uint8Array(
+		await crypto.subtle.digest('SHA-256', new TextEncoder().encode(body))
+	);
+	const etag = `"${hexEncode(digest)}"`;
+
+	const headers = {
+		'content-type': MediaType.PRIVATE_TOKEN_ISSUER_DIRECTORY,
+		'cache-control': `public, max-age=${ctx.env.DIRECTORY_CACHE_MAX_AGE_SECONDS}`,
+		'content-length': body.length.toString(),
+		'date': new Date().toUTCString(),
+		etag,
 	}
 
-	return directory;
-}
+	const response = new Response(body, { headers });
+
+	const toCacheResponse = response.clone();
+	// directory cache time within worker should be between 70% and 100% of browser cache time
+	const cacheTime = Math.floor(
+		Number.parseInt(ctx.env.DIRECTORY_CACHE_MAX_AGE_SECONDS) * (0.7 + 0.3 * Math.random())
+	).toFixed(0);
+	toCacheResponse.headers.set('cache-control', `public, max-age=${cacheTime}`);
+	ctx.waitUntil(cache.put(DIRECTORY_CACHE_REQUEST(ctx.hostname), toCacheResponse));
+
+	if (isRCP) {
+		const res: IssuerResponse = {
+			responseHeaders: headers,
+			responseBody: directory
+		}
+		return res;
+	}
+
+	return response;
+};
+
 
 export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 	const cache = await getDirectoryCache();

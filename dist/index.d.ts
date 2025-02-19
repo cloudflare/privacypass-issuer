@@ -1,14 +1,14 @@
 /// <reference types="@cloudflare/workers-types" />
 import { Bindings } from './bindings';
 import { Context } from './context';
-import { IssuerConfigurationResponse } from './types';
 import { WorkerEntrypoint } from 'cloudflare:workers';
+import { IssuerResponse } from './types';
 export declare const handleTokenRequest: (ctx: Context, request: Request) => Promise<Response>;
 export declare const handleHeadTokenDirectory: (ctx: Context, request: Request) => Promise<Response>;
 export declare class IssuerService extends WorkerEntrypoint<Bindings> {
-    tokenDirectory(request: Request, url: string): Promise<IssuerConfigurationResponse>;
+    tokenDirectory(request: Request, prefix: string): Promise<IssuerResponse>;
 }
-export declare const handleTokenDirectoryRCP: (request: Request) => IssuerConfigurationResponse;
+export declare const handleTokenDirectoryTest2: (ctx: Context, request: Request, isRCP?: boolean) => Promise<Response | IssuerResponse>;
 export declare const handleTokenDirectory: (ctx: Context, request: Request) => Promise<Response>;
 export declare const handleRotateKey: (ctx: Context, _request?: Request) => Promise<Response>;
 export declare const handleClearKey: (ctx: Context, _request?: Request) => Promise<Response>;

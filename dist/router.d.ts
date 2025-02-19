@@ -1,6 +1,7 @@
 /// <reference types="@cloudflare/workers-types" />
 import { Bindings } from './bindings';
 import { Context } from './context';
+import { IssuerResponse } from './types';
 export declare const HttpMethod: {
     readonly DELETE: "DELETE";
     readonly GET: "GET";
@@ -8,7 +9,7 @@ export declare const HttpMethod: {
     readonly POST: "POST";
     readonly PUT: "PUT";
 };
-export type ExportedHandlerFetchHandler = (ctx: Context, request: Request) => Response | Promise<Response>;
+export type ExportedHandlerFetchHandler = (ctx: Context, request: Request) => Response | Promise<Response | IssuerResponse>;
 export type HttpMethod = (typeof HttpMethod)[keyof typeof HttpMethod];
 export declare class Router {
     private handlers;
@@ -21,7 +22,7 @@ export declare class Router {
     head(path: string, handler: ExportedHandlerFetchHandler): Router;
     post(path: string, handler: ExportedHandlerFetchHandler): Router;
     put(path: string, handler: ExportedHandlerFetchHandler): Router;
-    private buildContext;
+    static buildContext(request: Request, env: Bindings, ectx: ExecutionContext): Context;
     private postProcessing;
     handle(request: Request<Bindings, IncomingRequestCfProperties<unknown>>, env: Bindings, ectx: ExecutionContext): Promise<Response>;
 }
