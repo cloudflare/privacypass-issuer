@@ -8,7 +8,6 @@ import { ConsoleLogger, FlexibleLogger, Logger } from './context/logging';
 import { MetricsRegistry } from './context/metrics';
 import { MethodNotAllowedError, PageNotFoundError, handleError, HTTPError } from './errors';
 import { WshimLogger } from './context/logging';
-import { IssuerResponse } from './types';
 
 export const HttpMethod = {
 	DELETE: 'DELETE',
@@ -20,7 +19,7 @@ export const HttpMethod = {
 
 
 // TODO: We could have a "Response" factory that allows us to return responses with a more sophisticated structure.
-export type ExportedHandlerFetchHandler = (ctx: Context, request: Request) => Response | Promise<Response | IssuerResponse>;
+export type ExportedHandlerFetchHandler = (ctx: Context, request: Request) => Response | Promise<Response>;
 export type HttpMethod = (typeof HttpMethod)[keyof typeof HttpMethod];
 
 // Simple router

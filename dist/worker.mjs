@@ -25028,7 +25028,7 @@ async function handleError(ctx, error, labels) {
   console.error(error.stack);
   ctx.metrics.erroredRequestsTotal.inc({
     ...labels,
-    version: ctx.env.VERSION_METADATA.id ?? "privacy-pass-issuer@v0.1.0.next-dev+4433c82"
+    version: ctx.env.VERSION_METADATA.id ?? "privacy-pass-issuer@v0.1.0.next-dev+cd45716"
   });
   const status = error.status ?? 500;
   const message = error.message || "Server Error";
@@ -25201,7 +25201,7 @@ var Router = class _Router {
         dsn: env.SENTRY_DSN,
         accessClientId: env.SENTRY_ACCESS_CLIENT_ID,
         accessClientSecret: env.SENTRY_ACCESS_CLIENT_SECRET,
-        release: "privacy-pass-issuer@v0.1.0.next-dev+4433c82",
+        release: "privacy-pass-issuer@v0.1.0.next-dev+cd45716",
         service: env.SERVICE,
         sampleRate: sentrySampleRate,
         coloName: request?.cf?.colo
@@ -25288,7 +25288,7 @@ var keyToTokenKeyID = async (key) => {
   return u8[u8.length - 1];
 };
 var handleTokenRequest = async (ctx, request) => {
-  ctx.metrics.issuanceRequestTotal.inc({ version: ctx.env.VERSION_METADATA.id ?? "privacy-pass-issuer@v0.1.0.next-dev+4433c82" });
+  ctx.metrics.issuanceRequestTotal.inc({ version: ctx.env.VERSION_METADATA.id ?? "privacy-pass-issuer@v0.1.0.next-dev+cd45716" });
   const contentType = request.headers.get("content-type");
   if (!contentType || contentType !== MediaType.PRIVATE_TOKEN_REQUEST) {
     throw new HeaderNotDefinedError(`"Content-Type" must be "${MediaType.PRIVATE_TOKEN_REQUEST}"`);
@@ -25366,67 +25366,6 @@ var handleHeadTokenDirectory = async (ctx, request) => {
     status: getResponse.status,
     headers: getResponse.headers
   });
-};
-var IssuerService = class extends WorkerEntrypoint {
-  async tokenDirectory(request, prefix) {
-    const ctx = Router.buildContext(request, this.env, this.ctx);
-    const jsonTokenResponse = await handleTokenDirectoryTest2(ctx, request, true);
-    return jsonTokenResponse;
-  }
-};
-var handleTokenDirectoryTest2 = async (ctx, request, isRCP = false) => {
-  const cache = await getDirectoryCache();
-  let cachedResponse;
-  try {
-    cachedResponse = await cache.match(DIRECTORY_CACHE_REQUEST(ctx.hostname));
-  } catch (e) {
-    const err = e;
-    throw new InternalCacheError(err.message);
-  }
-  ctx.metrics.directoryCacheMissTotal.inc();
-  const keyList = await ctx.bucket.ISSUANCE_KEYS.list({ include: ["customMetadata"] });
-  if (keyList.objects.length === 0) {
-    throw new Error("Issuer not initialised");
-  }
-  const freshestKeyCount = Number.parseInt(ctx.env.MINIMUM_FRESHEST_KEYS);
-  const keys = keyList.objects.sort((a, b) => new Date(b.uploaded).getTime() - new Date(a.uploaded).getTime()).slice(0, freshestKeyCount);
-  const directory = {
-    "issuer-request-uri": "/token-request",
-    "token-keys": keys.map((key) => ({
-      "token-type": 2 /* BlindRSA */,
-      "token-key": key.customMetadata.publicKey,
-      "not-before": Number.parseInt(
-        key.customMetadata.notBefore ?? (new Date(key.uploaded).getTime() / 1e3).toFixed(0)
-      )
-    }))
-  };
-  const body = JSON.stringify(directory);
-  const digest = new Uint8Array(
-    await crypto.subtle.digest("SHA-256", new TextEncoder().encode(body))
-  );
-  const etag = `"${hexEncode(digest)}"`;
-  const headers = {
-    "content-type": MediaType.PRIVATE_TOKEN_ISSUER_DIRECTORY,
-    "cache-control": `public, max-age=${ctx.env.DIRECTORY_CACHE_MAX_AGE_SECONDS}`,
-    "content-length": body.length.toString(),
-    "date": (/* @__PURE__ */ new Date()).toUTCString(),
-    etag
-  };
-  const response = new Response(body, { headers });
-  const toCacheResponse = response.clone();
-  const cacheTime = Math.floor(
-    Number.parseInt(ctx.env.DIRECTORY_CACHE_MAX_AGE_SECONDS) * (0.7 + 0.3 * Math.random())
-  ).toFixed(0);
-  toCacheResponse.headers.set("cache-control", `public, max-age=${cacheTime}`);
-  ctx.waitUntil(cache.put(DIRECTORY_CACHE_REQUEST(ctx.hostname), toCacheResponse));
-  if (isRCP) {
-    const res = {
-      responseHeaders: headers,
-      responseBody: directory
-    };
-    return res;
-  }
-  return response;
 };
 var handleTokenDirectory = async (ctx, request) => {
   const cache = await getDirectoryCache();
@@ -25574,15 +25513,12 @@ var VALID_PATHS = /* @__PURE__ */ new Set([
 var IssuerHandler = class extends WorkerEntrypoint {
   async fetch(request) {
     const router = new Router(VALID_PATHS);
-    router.get(PRIVATE_TOKEN_ISSUER_DIRECTORY, handleTokenDirectoryTest2).post("/token-request", handleTokenRequest).post("/admin/rotate", handleRotateKey).post("/admin/clear", handleClearKey);
+    router.get(PRIVATE_TOKEN_ISSUER_DIRECTORY, handleTokenDirectory).post("/token-request", handleTokenRequest).post("/admin/rotate", handleRotateKey).post("/admin/clear", handleClearKey);
     return router.handle(
       request,
       this.env,
       this.ctx
     );
-  }
-  async add(a, b) {
-    return a + b;
   }
 };
 var src_default = {
@@ -25611,13 +25547,11 @@ var src_default = {
 export {
   Context,
   IssuerHandler,
-  IssuerService,
   Router,
   src_default as default,
   handleClearKey,
   handleHeadTokenDirectory,
   handleRotateKey,
   handleTokenDirectory,
-  handleTokenDirectoryTest2,
   handleTokenRequest
 };

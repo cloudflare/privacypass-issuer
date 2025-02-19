@@ -1,6 +1,6 @@
 /// <reference types="@cloudflare/workers-types" />
 import type { R2Bucket, Performance } from '@cloudflare/workers-types/2023-07-01';
-import { IssuerHandler, IssuerService } from '.';
+import { IssuerHandler } from '.';
 export interface Bindings {
     DIRECTORY_CACHE_MAX_AGE_SECONDS: string;
     ENVIRONMENT: string;
@@ -20,5 +20,4 @@ export interface Bindings {
     WSHIM_SOCKET?: Fetcher;
     WSHIM_ENDPOINT: string;
     PRIVACYPASS_ISSUER: Service<IssuerHandler>;
-    PRIVACYPASS_SERVICE: Service<IssuerService>;
 }
