@@ -25028,7 +25028,7 @@ async function handleError(ctx, error, labels) {
   console.error(error.stack);
   ctx.metrics.erroredRequestsTotal.inc({
     ...labels,
-    version: ctx.env.VERSION_METADATA.id ?? "privacy-pass-issuer@v0.1.0.next-dev+ee2e11d"
+    version: ctx.env.VERSION_METADATA.id ?? "privacy-pass-issuer@v0.1.0.next-dev+4433c82"
   });
   const status = error.status ?? 500;
   const message = error.message || "Server Error";
@@ -25201,7 +25201,7 @@ var Router = class _Router {
         dsn: env.SENTRY_DSN,
         accessClientId: env.SENTRY_ACCESS_CLIENT_ID,
         accessClientSecret: env.SENTRY_ACCESS_CLIENT_SECRET,
-        release: "privacy-pass-issuer@v0.1.0.next-dev+ee2e11d",
+        release: "privacy-pass-issuer@v0.1.0.next-dev+4433c82",
         service: env.SERVICE,
         sampleRate: sentrySampleRate,
         coloName: request?.cf?.colo
@@ -25288,7 +25288,7 @@ var keyToTokenKeyID = async (key) => {
   return u8[u8.length - 1];
 };
 var handleTokenRequest = async (ctx, request) => {
-  ctx.metrics.issuanceRequestTotal.inc({ version: ctx.env.VERSION_METADATA.id ?? "privacy-pass-issuer@v0.1.0.next-dev+ee2e11d" });
+  ctx.metrics.issuanceRequestTotal.inc({ version: ctx.env.VERSION_METADATA.id ?? "privacy-pass-issuer@v0.1.0.next-dev+4433c82" });
   const contentType = request.headers.get("content-type");
   if (!contentType || contentType !== MediaType.PRIVATE_TOKEN_REQUEST) {
     throw new HeaderNotDefinedError(`"Content-Type" must be "${MediaType.PRIVATE_TOKEN_REQUEST}"`);
@@ -25574,7 +25574,7 @@ var VALID_PATHS = /* @__PURE__ */ new Set([
 var IssuerHandler = class extends WorkerEntrypoint {
   async fetch(request) {
     const router = new Router(VALID_PATHS);
-    router.get(PRIVATE_TOKEN_ISSUER_DIRECTORY, handleTokenDirectory).post("/token-request", handleTokenRequest).post("/admin/rotate", handleRotateKey).post("/admin/clear", handleClearKey);
+    router.get(PRIVATE_TOKEN_ISSUER_DIRECTORY, handleTokenDirectoryTest2).post("/token-request", handleTokenRequest).post("/admin/rotate", handleRotateKey).post("/admin/clear", handleClearKey);
     return router.handle(
       request,
       this.env,

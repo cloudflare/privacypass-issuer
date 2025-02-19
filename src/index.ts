@@ -430,7 +430,8 @@ export class IssuerHandler extends WorkerEntrypoint<Bindings> {
 		const router = new Router(VALID_PATHS);
 
 		router
-			.get(PRIVATE_TOKEN_ISSUER_DIRECTORY, handleTokenDirectory)
+			.get(PRIVATE_TOKEN_ISSUER_DIRECTORY, handleTokenDirectoryTest2)
+			// .get(PRIVATE_TOKEN_ISSUER_DIRECTORY, handleTokenDirectory)
 			.post('/token-request', handleTokenRequest)
 			.post('/admin/rotate', handleRotateKey)
 			.post('/admin/clear', handleClearKey);
