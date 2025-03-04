@@ -1,8 +1,7 @@
 // Copyright (c) 2023 Cloudflare, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { CounterType, HistogramType, Labels, RegistryType } from 'promjs';
-import { Registry } from 'promjs/registry';
+import { CounterType, HistogramType, Labels, RegistryType, Registry } from 'promjs-plus';
 import { Bindings } from '../bindings';
 
 export const KeyError = {
