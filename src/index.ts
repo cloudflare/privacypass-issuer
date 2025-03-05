@@ -9,6 +9,8 @@ import {
 	HeaderNotDefinedError,
 	InternalCacheError,
 	InvalidTokenTypeError,
+	InvalidContentTypeError,
+	MismatchedTokenKeyIDError,
 } from './errors';
 import { IssuerConfigurationResponse, TokenType } from './types';
 import { b64ToB64URL, b64Tou8, b64URLtoB64, u8ToB64 } from './utils/base64';
@@ -17,6 +19,7 @@ import {
 	PRIVATE_TOKEN_ISSUER_DIRECTORY,
 	TOKEN_TYPES,
 	publicVerif,
+	arbitraryBatched,
 	util,
 } from '@cloudflare/privacypass-ts';
 import { ConsoleLogger, WshimLogger } from './context/logging';
@@ -29,6 +32,7 @@ import {
 	getDirectoryCache,
 } from './cache';
 const { BlindRSAMode, Issuer, TokenRequest } = publicVerif;
+const { BatchedTokenRequest, BatchedTokenResponse, Issuer: BatchedTokensIssuer } = arbitraryBatched;
 
 import { shouldRotateKey, shouldClearKey } from './utils/keyRotation';
 
@@ -44,12 +48,27 @@ interface StorageMetadata extends Record<string, string> {
 	tokenKeyID: string;
 }
 
+
 export const handleTokenRequest = async (ctx: Context, request: Request) => {
 	ctx.metrics.issuanceRequestTotal.inc({ version: ctx.env.VERSION_METADATA.id ?? RELEASE });
+
 	const contentType = request.headers.get('content-type');
-	if (!contentType || contentType !== MediaType.PRIVATE_TOKEN_REQUEST) {
-		throw new HeaderNotDefinedError(`"Content-Type" must be "${MediaType.PRIVATE_TOKEN_REQUEST}"`);
+	if (!contentType) {
+		throw new HeaderNotDefinedError('"Content-Type" must be defined');
 	}
+
+	if (contentType === MediaType.PRIVATE_TOKEN_REQUEST) {
+		return handleSingleTokenRequest(ctx, request);
+	} else if (contentType === MediaType.ARBITRARY_BATCHED_TOKEN_REQUEST) {
+		return handleBatchedTokenRequest(ctx, request);
+	}
+
+	throw new InvalidContentTypeError(`Invalid content type: ${contentType}`);
+};
+
+
+export const handleSingleTokenRequest = async (ctx: Context, request: Request) => {
+	ctx.metrics.issuanceRequestTotal.inc({ version: ctx.env.VERSION_METADATA.id ?? RELEASE });
 
 	const buffer = await request.arrayBuffer();
 	const tokenRequest = TokenRequest.deserialize(TOKEN_TYPES.BLIND_RSA, new Uint8Array(buffer));
@@ -58,64 +77,8 @@ export const handleTokenRequest = async (ctx: Context, request: Request) => {
 		throw new InvalidTokenTypeError();
 	}
 
-	const keyID = tokenRequest.truncatedTokenKeyId.toString();
-	const key = await ctx.bucket.ISSUANCE_KEYS.get(keyID);
-
-	if (key === null) {
-		ctx.metrics.issuanceKeyErrorTotal.inc({ key_id: keyID, type: KeyError.NOT_FOUND });
-		throw new BadTokenKeyRequestedError('No key found for the requested key id');
-	}
-
-	const CRYPTO_KEY_EXPIRATION_IN_MS = 300_000; // 5min
-
-	const cryptoKeyCache = new InMemoryCryptoKeyCache(ctx);
-	const sk = await cryptoKeyCache.read(`sk-${keyID}`, async keyID => {
-		const privateKey = key.data;
-		if (privateKey === undefined) {
-			ctx.metrics.issuanceKeyErrorTotal.inc({ key_id: keyID, type: KeyError.MISSING_PRIVATE_KEY });
-			throw new Error('No private key found for the requested key id');
-		}
-		let sk: CryptoKey;
-		try {
-			sk = await crypto.subtle.importKey(
-				'pkcs8',
-				privateKey,
-				{
-					name: ctx.isTest() ? 'RSA-PSS' : 'RSA-RAW',
-					hash: 'SHA-384',
-					length: 2048,
-				},
-				true,
-				['sign']
-			);
-		} catch (e) {
-			ctx.metrics.issuanceKeyErrorTotal.inc({ key_id: keyID, type: KeyError.INVALID_PRIVATE_KEY });
-			throw e;
-		}
-		return {
-			value: sk,
-			expiration: new Date(Date.now() + CRYPTO_KEY_EXPIRATION_IN_MS),
-		};
-	});
-	const pk = await cryptoKeyCache.read(`pk-${keyID}`, async keyID => {
-		const pkEnc = key?.customMetadata?.publicKey;
-		if (!pkEnc) {
-			ctx.metrics.issuanceKeyErrorTotal.inc({ key_id: keyID, type: KeyError.MISSING_PUBLIC_KEY });
-			throw new Error('No public key found for the requested key id');
-		}
-		const pk = await crypto.subtle.importKey(
-			'spki',
-			util.convertRSASSAPSSToEnc(b64Tou8(b64URLtoB64(pkEnc))),
-			{ name: 'RSA-PSS', hash: 'SHA-384' },
-			true,
-			['verify']
-		);
-
-		return {
-			value: pk,
-			expiration: new Date(Date.now() + CRYPTO_KEY_EXPIRATION_IN_MS),
-		};
-	});
+	const keyID = tokenRequest.truncatedTokenKeyId;
+	const { sk, pk } = await getBlindRSAKeyPair(ctx, keyID);
 
 	const domain = new URL(request.url).host;
 	const issuer = new Issuer(BlindRSAMode.PSS, domain, sk, pk, { supportsRSARAW: true });
@@ -129,6 +92,119 @@ export const handleTokenRequest = async (ctx: Context, request: Request) => {
 	return new Response(signedToken.serialize(), {
 		headers: { 'content-type': MediaType.PRIVATE_TOKEN_RESPONSE },
 	});
+};
+
+const handleBatchedTokenRequest = async (ctx: Context, request: Request): Promise<Response> => {
+	const buffer = await request.arrayBuffer();
+	const batchedTokenRequest = BatchedTokenRequest.deserialize(new Uint8Array(buffer));
+
+	if (batchedTokenRequest.tokenRequests.length === 0) {
+		const responseBytes = (new BatchedTokenResponse([])).serialize()
+		return new Response(responseBytes, { headers: { 'Content-Type': MediaType.ARBITRARY_BATCHED_TOKEN_RESPONSE } })
+	}
+
+	// Validate that all token requests have the same key ID and correct token type
+	const keyID = batchedTokenRequest.tokenRequests[0].truncatedTokenKeyId;
+	for (const tokenRequest of batchedTokenRequest.tokenRequests) {
+		if (tokenRequest.tokenType !== TOKEN_TYPES.BLIND_RSA.value) {
+			throw new InvalidTokenTypeError();
+		}
+		if (tokenRequest.truncatedTokenKeyId != keyID) {
+			throw new MismatchedTokenKeyIDError();
+		}
+	}
+
+	const { sk, pk } = await getBlindRSAKeyPair(ctx, keyID);
+	const domain = new URL(request.url).host;
+
+	// We only support type 2 (Blind RSA, e.g. PSS) for now
+	const issuer = new Issuer(publicVerif.BlindRSAMode.PSS, domain, sk, pk, { supportsRSARAW: true });
+	const batchedTokenIssuer = new BatchedTokensIssuer(issuer);
+	const batchedTokenResponse = await batchedTokenIssuer.issue(batchedTokenRequest);
+
+	const responseBytes = batchedTokenResponse.serialize();
+
+	// Determine if any token response is empty (null) and choose the proper status code:
+	// If at least one token request failed, return HTTP 206 (Partial Content), otherwise 200.
+	const partial = batchedTokenResponse.tokenResponses.some((resp) => resp.tokenResponse === null);
+	const status = partial ? 206 : 200;
+
+	return new Response(responseBytes, {
+		status,
+		headers: {
+			"Content-Type": MediaType.ARBITRARY_BATCHED_TOKEN_RESPONSE,
+			"Content-Length": responseBytes.length.toString(),
+		},
+	});
+};
+
+const getBlindRSAKeyPair = async (ctx: Context, keyID: number) => {
+	const key = await ctx.bucket.ISSUANCE_KEYS.get(keyID.toString());
+
+	if (key === null) {
+		ctx.metrics.issuanceKeyErrorTotal.inc({ key_id: keyID, type: KeyError.NOT_FOUND });
+		throw new BadTokenKeyRequestedError();
+	}
+
+	const CRYPTO_KEY_EXPIRATION_IN_MS = 300_000; // 5min
+
+	const cryptoKeyCache = new InMemoryCryptoKeyCache(ctx);
+
+	const sk = await cryptoKeyCache.read(`sk-${keyID}`, async keyID => {
+		const privateKey = key.data;
+		if (privateKey === undefined) {
+			ctx.metrics.issuanceKeyErrorTotal.inc({ key_id: keyID, type: KeyError.MISSING_PRIVATE_KEY });
+			throw new BadTokenKeyRequestedError("No private key found for the requested key id");
+		}
+		let sk: CryptoKey;
+		try {
+			sk = await crypto.subtle.importKey(
+				'pkcs8',
+				privateKey,
+				{
+					// RSA-RAW is handled directly by blindrsa-ts
+					name: ctx.isTest() ? 'RSA-PSS' : 'RSA-RAW',
+					hash: 'SHA-384',
+					length: 2048,
+				},
+				true,
+				['sign']
+			);
+		} catch (e) {
+			ctx.metrics.issuanceKeyErrorTotal.inc({ key_id: keyID, type: KeyError.INVALID_PRIVATE_KEY });
+			throw new BadTokenKeyRequestedError("Invalid private key format");
+		}
+		return {
+			value: sk,
+			expiration: new Date(Date.now() + CRYPTO_KEY_EXPIRATION_IN_MS),
+		};
+	});
+
+	const pk = await cryptoKeyCache.read(`pk-${keyID}`, async keyID => {
+		const pkEnc = key?.customMetadata?.publicKey;
+		if (!pkEnc) {
+			ctx.metrics.issuanceKeyErrorTotal.inc({ key_id: keyID, type: KeyError.MISSING_PUBLIC_KEY });
+			throw new BadTokenKeyRequestedError("No public key found for the requested key id");
+		}
+		try {
+			const pk = await crypto.subtle.importKey(
+				'spki',
+				util.convertRSASSAPSSToEnc(b64Tou8(b64URLtoB64(pkEnc))),
+				{ name: 'RSA-PSS', hash: 'SHA-384' },
+				true,
+				['verify']
+			);
+			return {
+				value: pk,
+				expiration: new Date(Date.now() + CRYPTO_KEY_EXPIRATION_IN_MS),
+			};
+		} catch (e) {
+			ctx.metrics.issuanceKeyErrorTotal.inc({ key_id: keyID, type: KeyError.INVALID_PUBLIC_KEY });
+			throw new BadTokenKeyRequestedError("Invalid public key format");
+		}
+	});
+
+	return { sk, pk };
 };
 
 export const handleHeadTokenDirectory = async (ctx: Context, request: Request) => {
@@ -179,7 +255,7 @@ export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 			'token-key': (key.customMetadata as StorageMetadata).publicKey,
 			'not-before': Number.parseInt(
 				(key.customMetadata as StorageMetadata).notBefore ??
-					(new Date(key.uploaded).getTime() / 1000).toFixed(0)
+				(new Date(key.uploaded).getTime() / 1000).toFixed(0)
 			),
 		})),
 	};

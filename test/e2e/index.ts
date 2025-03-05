@@ -4,10 +4,9 @@
 import { program } from 'commander';
 import { MTLSConfiguration, testE2E, rotateKey } from './issuer.js';
 
-async function testCommand(issuerName: string, mTLS?: MTLSConfiguration) {
-	console.log('Testing with issuer', issuerName);
-	const validIssuer = await testE2E(issuerName, mTLS);
-
+async function testCommand(issuerName: string, numOfTokens: number, mTLS?: MTLSConfiguration) {
+	console.log(`Testing with issuer ${issuerName} requesting ${numOfTokens} token(s)`);
+	const validIssuer = await testE2E(issuerName, numOfTokens, mTLS);
 	if (validIssuer) {
 		console.log('Issuer tokens are valid');
 	} else {
@@ -31,16 +30,19 @@ async function main() {
 	program
 		.option('--cert <path>', 'Path to client certificate. e.g. ./client.crt')
 		.option('--key <path>', 'Path to client key. e.g. ./client.key')
-		.option('--rotate', 'Rotate the key for the given issuer') // Leave
+		.option('--rotate', 'Rotate the key for the given issuer')
+		.option('--tokens <number>', 'Number of tokens to use', (val) => parseInt(val, 10), 1)
 		.argument('<issuer-name>', 'Name of the issuer. e.g. demo-pat.issuer.cloudflare.com')
 		.action(async (issuerName, options) => {
 			try {
+				const numOfTokens = options.tokens;
 				if (options.cert && options.key) {
+					console.log("passed a cert and key");
 					const mTLS = { certPath: options.cert, keyPath: options.key };
 					if (options.rotate) {
 						await rotateCommand(issuerName, mTLS);
 					} else {
-						await testCommand(issuerName, { certPath: options.cert, keyPath: options.key });
+						await testCommand(issuerName, numOfTokens, { certPath: options.cert, keyPath: options.key });
 					}
 				} else if (options.cert || options.key) {
 					console.error('You must specify both --cert and --key');
@@ -48,7 +50,7 @@ async function main() {
 					if (options.rotate) {
 						await rotateCommand(issuerName);
 					} else {
-						await testCommand(issuerName);
+						await testCommand(issuerName, numOfTokens);
 					}
 				}
 			} catch (e) {

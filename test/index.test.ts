@@ -26,7 +26,7 @@ import {
 } from '@cloudflare/privacypass-ts';
 import { getDirectoryCache } from '../src/cache';
 import { shouldRotateKey, shouldClearKey } from '../src/utils/keyRotation';
-const { TokenRequest } = publicVerif;
+const { TokenRequest, BLIND_RSA } = publicVerif;
 
 const sampleURL = 'http://localhost';
 
@@ -78,7 +78,7 @@ describe('challenge handlers', () => {
 		const tokenKeyId = await keyToTokenKeyID(new TextEncoder().encode(publicKeyEnc));
 
 		// note that blindedMsg should be the payload and not the message directly
-		const tokenRequest = new TokenRequest(tokenKeyId, blindedMsg, TOKEN_TYPES.BLIND_RSA);
+		const tokenRequest = new TokenRequest(tokenKeyId, blindedMsg, BLIND_RSA);
 
 		const request = new Request(tokenRequestURL, {
 			method: 'POST',
@@ -90,6 +90,51 @@ describe('challenge handlers', () => {
 
 		expect(response.status).toBe(200);
 		expect(response.headers.get('content-type')).toBe(MediaType.PRIVATE_TOKEN_RESPONSE);
+
+		const blindSignature = new Uint8Array(await response.arrayBuffer());
+		const signature = await suite.finalize(publicKey, preparedMsg, blindSignature, inv);
+		const isValid = await suite.verify(publicKey, signature, preparedMsg);
+		expect(isValid).toBe(true);
+	});
+
+	it('should return a Privacy Pass token response when provided with a valid batched Privacy Pass token request', async () => {
+		const ctx = getContext({
+			request: new Request(sampleURL),
+			env: getEnv(),
+			ectx: new ExecutionContextMock(),
+		});
+
+		const msgString = 'Hello World!';
+		const message = new TextEncoder().encode(msgString);
+		const preparedMsg = suite.prepare(message);
+		const { publicKey } = await mockPrivateKey(ctx);
+		const { blindedMsg, inv } = await suite.blind(publicKey, preparedMsg);
+		const publicKeyExport = new Uint8Array(
+			(await crypto.subtle.exportKey('spki', publicKey)) as ArrayBuffer
+		);
+		const publicKeyU8 = util.convertEncToRSASSAPSS(publicKeyExport);
+		const publicKeyEnc = b64ToB64URL(u8ToB64(publicKeyU8));
+		const tokenKeyId = await keyToTokenKeyID(new TextEncoder().encode(publicKeyEnc));
+
+		// note that blindedMsg should be the payload and not the message directly
+		const tokenRequest = new TokenRequest(tokenKeyId, blindedMsg, BLIND_RSA);
+
+		// Create a batched token request
+		const batchedTokenRequest = new Uint8Array([
+			...tokenRequest.serialize(),
+			...tokenRequest.serialize(), // Add another token request to the batch
+		]);
+
+		const request = new Request(tokenRequestURL, {
+			method: 'POST',
+			headers: { 'content-type': MediaType.ARBITRARY_BATCHED_TOKEN_REQUEST },
+			body: batchedTokenRequest,
+		});
+
+		const response = await handleTokenRequest(ctx, request);
+
+		expect(response.status).toBe(200);
+		expect(response.headers.get('content-type')).toBe(MediaType.ARBITRARY_BATCHED_TOKEN_REQUEST);
 
 		const blindSignature = new Uint8Array(await response.arrayBuffer());
 		const signature = await suite.finalize(publicKey, preparedMsg, blindSignature, inv);

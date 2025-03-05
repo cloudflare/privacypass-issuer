@@ -7,6 +7,7 @@ import { Bindings } from '../bindings';
 export const KeyError = {
 	NOT_FOUND: 'not-found',
 	INVALID_PRIVATE_KEY: 'invalid-private-key',
+	INVALID_PUBLIC_KEY: 'invalid-public-key',
 	MISSING_PRIVATE_KEY: 'missing-private-key',
 	MISSING_PUBLIC_KEY: 'missing-public-key',
 };
