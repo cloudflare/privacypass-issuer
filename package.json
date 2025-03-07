@@ -63,5 +63,8 @@
 		"promjs-plus": "0.5.4",
 		"toucan-js": "3.3.1",
 		"typescript": "5.3.3"
+	},
+	"overrides": {
+		"@cloudflare/blindrsa-ts": "file:./vendor/cloudflare-blindrsa-ts-0.4.2.tgz"
 	}
 }
