@@ -127,9 +127,7 @@ export class Router {
 
 	private async postProcessing(ctx: Context) {
 		// wait for async tasks to complete before reporting metrics
-		await ctx.waitForPromises();
-		await ctx.metrics.publish();
-		await ctx.wshimLogger.flushLogs();
+		await Promise.all([ctx.waitForPromises(), ctx.metrics.publish(), ctx.wshimLogger.flushLogs()]);
 	}
 
 	// match exact path, and returns a response using the appropriate path handler
@@ -143,9 +141,6 @@ export class Router {
 		const path = this.normalisePath(rawPath);
 		ctx.metrics.requestsTotal.inc({ path });
 
-		// check if there exist a handler for the specific method and path.
-		// first filtering by method, then checking the path.
-		// dev: if there needs to be argument-in-path down the line, this is where the context would be built and validated
 		let response: Response;
 		try {
 			const handlers = this.handlers[request.method as HttpMethod];

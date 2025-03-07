@@ -64,7 +64,30 @@ export const getContext = (options: MockContextOptions): Context => {
 	const metrics = options.metrics ?? new MetricsRegistry(options.env);
 	const wshimLogger = options.wshimLogger ?? new WshimLogger(options.request, options.env);
 	const waitUntilFunc = options.waitUntilFunc || options.ectx.waitUntil.bind(options.ectx);
-	return new Context(options.request, options.env, waitUntilFunc, logger, metrics, wshimLogger);
+
+	const context = new Context(
+		options.request,
+		options.env,
+		waitUntilFunc,
+		logger,
+		metrics,
+		wshimLogger
+	);
+
+	// Clear stored keys before each test
+	(async () => {
+		try {
+			const storedKeys = await context.bucket.ISSUANCE_KEYS.list();
+			for (const key of storedKeys.objects) {
+				await context.bucket.ISSUANCE_KEYS.delete(key.key);
+				console.log(`[Test] Deleted key: ${key.key}`);
+			}
+		} catch (error) {
+			console.error('[Test] Failed to clear storage:', error);
+		}
+	})();
+
+	return context;
 };
 
 const originalDateNow = Date.now;

@@ -120,6 +120,17 @@ export class InvalidTokenTypeError extends HTTPError {
 	code: string;
 
 	constructor(message = 'Invalid token type') {
+		super(message, 400);
+		this.name = 'InvalidTokenTypeError';
+		this.code = InvalidTokenTypeError.CODE;
+	}
+}
+
+export class InvalidBatchedTokenTypeError extends HTTPError {
+	static CODE = 'ERROR_INVALID_TOKEN_TYPE';
+	code: string;
+
+	constructor(message = 'Invalid token type') {
 		super(message, 422);
 		this.name = 'InvalidTokenTypeError';
 		this.code = InvalidTokenTypeError.CODE;
@@ -131,7 +142,7 @@ export class BadTokenKeyRequestedError extends HTTPError {
 	code: string;
 
 	constructor(message = 'Bad token key requested') {
-		super(message, 422);
+		super(message, 400);
 		this.name = 'BadTokenKeyRequestedError';
 		this.code = BadTokenKeyRequestedError.CODE;
 	}
