@@ -8,8 +8,9 @@ import { ConsoleLogger, FlexibleLogger, Logger } from './context/logging';
 import { MetricsRegistry } from './context/metrics';
 import { MethodNotAllowedError, PageNotFoundError, handleError, HTTPError } from './errors';
 import { WshimLogger } from './context/logging';
+import { IssuerResponse } from './types';
 
-const HttpMethod = {
+export const HttpMethod = {
 	DELETE: 'DELETE',
 	GET: 'GET',
 	HEAD: 'HEAD',
@@ -17,8 +18,10 @@ const HttpMethod = {
 	PUT: 'PUT',
 } as const;
 
-type ExportedHandlerFetchHandler = (ctx: Context, request: Request) => Response | Promise<Response>;
-type HttpMethod = (typeof HttpMethod)[keyof typeof HttpMethod];
+
+// TODO: We could have a "Response" factory that allows us to return responses with a more sophisticated structure.
+export type ExportedHandlerFetchHandler = (ctx: Context, request: Request) => Response | Promise<Response | IssuerResponse>;
+export type HttpMethod = (typeof HttpMethod)[keyof typeof HttpMethod];
 
 // Simple router
 // Register HTTP method handlers, and then handles them by exact path match
@@ -27,20 +30,15 @@ export class Router {
 		[key: string]: { [key: string]: ExportedHandlerFetchHandler };
 	} = {};
 
-	// Normalise path, so that they never end with a trailing '/'
+	private validPaths: Set<string>;
+
+	constructor(validPaths: Set<string>) {
+		this.validPaths = validPaths;
+	}
+
 	private normalisePath(path: string): string {
 		const normalised = path.endsWith('/') ? path.slice(0, -1) : path;
-		switch (normalised) {
-			case PRIVATE_TOKEN_ISSUER_DIRECTORY:
-			case '/.well-known/token-issuer-directory':
-			case '/token-request':
-			case '/admin/rotate':
-			case '/admin/clear':
-			case '/':
-				return normalised;
-			default:
-				return '/not-found';
-		}
+		return this.validPaths.has(normalised) ? normalised : '/not-found';
 	}
 
 	// Register a handler for a specific path on the router
@@ -66,7 +64,7 @@ export class Router {
 				ctx: Context,
 				request: Request
 			): Promise<Response> => {
-				const response = await handler(ctx, request);
+				const response = await handler(ctx, request) as Response;
 				if (response.ok) {
 					return new Response(null, response);
 				}
@@ -96,7 +94,8 @@ export class Router {
 		return this.registerMethod(HttpMethod.PUT, path, handler);
 	}
 
-	private buildContext(request: Request, env: Bindings, ectx: ExecutionContext): Context {
+	// private buildContext(request: Request, env: Bindings, ectx: ExecutionContext): Context {
+	public static buildContext(request: Request, env: Bindings, ectx: ExecutionContext): Context {
 		// Prometheus Registry should be unique per request
 		const metrics = new MetricsRegistry(env);
 		const wshimLogger = new WshimLogger(request, env);
@@ -138,7 +137,8 @@ export class Router {
 		env: Bindings,
 		ectx: ExecutionContext
 	): Promise<Response> {
-		const ctx = this.buildContext(request, env, ectx);
+		// const ctx = this.buildContext(request, env, ectx);
+		const ctx = Router.buildContext(request, env, ectx);
 		const rawPath = new URL(request.url).pathname;
 		const path = this.normalisePath(rawPath);
 		ctx.metrics.requestsTotal.inc({ path });
@@ -155,7 +155,7 @@ export class Router {
 			if (!(path in handlers)) {
 				throw new PageNotFoundError();
 			}
-			response = await handlers[path](ctx, request);
+			response = await handlers[path](ctx, request) as Response;
 		} catch (e: unknown) {
 			let status = 500;
 			if (e instanceof HTTPError) {

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import type { R2Bucket, Performance } from '@cloudflare/workers-types/2023-07-01';
+import { IssuerHandler} from '.';
 
 export interface Bindings {
 	// variables and secrets
@@ -32,4 +33,7 @@ export interface Bindings {
 	LOGGING_SHIM_TOKEN: string;
 	WSHIM_SOCKET?: Fetcher;
 	WSHIM_ENDPOINT: string;
+
+	// Service Bindings 
+	PRIVACYPASS_ISSUER: Service<IssuerHandler>
 }
