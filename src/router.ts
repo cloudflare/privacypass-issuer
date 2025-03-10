@@ -9,7 +9,7 @@ import { MetricsRegistry } from './context/metrics';
 import { MethodNotAllowedError, PageNotFoundError, handleError, HTTPError } from './errors';
 import { WshimLogger } from './context/logging';
 
-const HttpMethod = {
+export const HttpMethod = {
 	DELETE: 'DELETE',
 	GET: 'GET',
 	HEAD: 'HEAD',
@@ -17,8 +17,10 @@ const HttpMethod = {
 	PUT: 'PUT',
 } as const;
 
-type ExportedHandlerFetchHandler = (ctx: Context, request: Request) => Response | Promise<Response>;
-type HttpMethod = (typeof HttpMethod)[keyof typeof HttpMethod];
+
+// TODO: We could have a "Response" factory that allows us to return responses with a more sophisticated structure.
+export type ExportedHandlerFetchHandler = (ctx: Context, request: Request) => Response | Promise<Response>;
+export type HttpMethod = (typeof HttpMethod)[keyof typeof HttpMethod];
 
 // Simple router
 // Register HTTP method handlers, and then handles them by exact path match
@@ -27,20 +29,15 @@ export class Router {
 		[key: string]: { [key: string]: ExportedHandlerFetchHandler };
 	} = {};
 
-	// Normalise path, so that they never end with a trailing '/'
+	private validPaths: Set<string>;
+
+	constructor(validPaths: Set<string>) {
+		this.validPaths = validPaths;
+	}
+
 	private normalisePath(path: string): string {
 		const normalised = path.endsWith('/') ? path.slice(0, -1) : path;
-		switch (normalised) {
-			case PRIVATE_TOKEN_ISSUER_DIRECTORY:
-			case '/.well-known/token-issuer-directory':
-			case '/token-request':
-			case '/admin/rotate':
-			case '/admin/clear':
-			case '/':
-				return normalised;
-			default:
-				return '/not-found';
-		}
+		return this.validPaths.has(normalised) ? normalised : '/not-found';
 	}
 
 	// Register a handler for a specific path on the router
