@@ -21,6 +21,7 @@ import {
 	MediaType,
 	PRIVATE_TOKEN_ISSUER_DIRECTORY,
 	publicVerif,
+	TOKEN_TYPES,
 	util,
 } from '@cloudflare/privacypass-ts';
 import { getDirectoryCache } from '../src/cache';
@@ -77,7 +78,7 @@ describe('challenge handlers', () => {
 		const tokenKeyId = await keyToTokenKeyID(new TextEncoder().encode(publicKeyEnc));
 
 		// note that blindedMsg should be the payload and not the message directly
-		const tokenRequest = new TokenRequest(tokenKeyId, blindedMsg);
+		const tokenRequest = new TokenRequest(tokenKeyId, blindedMsg, TOKEN_TYPES.BLIND_RSA);
 
 		const request = new Request(tokenRequestURL, {
 			method: 'POST',

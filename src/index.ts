@@ -52,7 +52,7 @@ export const handleTokenRequest = async (ctx: Context, request: Request) => {
 	}
 
 	const buffer = await request.arrayBuffer();
-	const tokenRequest = TokenRequest.deserialize(new Uint8Array(buffer));
+	const tokenRequest = TokenRequest.deserialize(TOKEN_TYPES.BLIND_RSA, new Uint8Array(buffer));
 
 	if (tokenRequest.tokenType !== TOKEN_TYPES.BLIND_RSA.value) {
 		throw new InvalidTokenTypeError();
