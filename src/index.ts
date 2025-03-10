@@ -23,8 +23,7 @@ import {
 	arbitraryBatched,
 	util,
 } from '@cloudflare/privacypass-ts';
-import { ConsoleLogger, WshimLogger } from './context/logging';
-import { KeyError, MetricsRegistry } from './context/metrics';
+import { KeyError } from './context/metrics';
 import { hexEncode } from './utils/hex';
 import {
 	DIRECTORY_CACHE_REQUEST,
@@ -35,7 +34,8 @@ import {
 const { BlindRSAMode, Issuer, TokenRequest } = publicVerif;
 const { BatchedTokenRequest, BatchedTokenResponse, Issuer: BatchedTokensIssuer } = arbitraryBatched;
 
-import { shouldRotateKey, shouldClearKey } from './utils/keyRotation';
+import { shouldClearKey } from './utils/keyRotation';
+import { WorkerEntrypoint } from 'cloudflare:workers';
 
 const keyToTokenKeyID = async (key: Uint8Array): Promise<number> => {
 	const hash = await crypto.subtle.digest('SHA-256', key);
@@ -49,27 +49,60 @@ interface StorageMetadata extends Record<string, string> {
 	tokenKeyID: string;
 }
 
-export const handleTokenRequest = async (ctx: Context, request: Request) => {
-	ctx.metrics.issuanceRequestTotal.inc({ version: ctx.env.VERSION_METADATA.id ?? RELEASE });
-	const contentType = request.headers.get('content-type');
-
+export const issue = async (
+	ctx: Context,
+	buffer: ArrayBuffer,
+	domain: string,
+	contentType?: string
+): Promise<{ serialized: Uint8Array; status?: number; responseContentType: string }> => {
 	if (!contentType) {
 		throw new HeaderNotDefinedError('"Content-Type" must be defined');
 	}
 
 	switch (contentType) {
-		case MediaType.PRIVATE_TOKEN_REQUEST:
-			return handleSingleTokenRequest(ctx, request);
-		case MediaType.ARBITRARY_BATCHED_TOKEN_REQUEST:
-			return handleBatchedTokenRequest(ctx, request);
+		case MediaType.PRIVATE_TOKEN_REQUEST: {
+			const serialized = await handleSingleTokenRequest(ctx, buffer, domain);
+			return { serialized, responseContentType: MediaType.PRIVATE_TOKEN_RESPONSE };
+		}
+		case MediaType.ARBITRARY_BATCHED_TOKEN_REQUEST: {
+			const { serialized, status } = await handleBatchedTokenRequest(ctx, buffer, domain);
+			return {
+				serialized,
+				status,
+				responseContentType: MediaType.ARBITRARY_BATCHED_TOKEN_RESPONSE,
+			};
+		}
 		default:
 			throw new InvalidContentTypeError(`Invalid content type: ${contentType}`);
 	}
 };
 
-export const handleSingleTokenRequest = async (ctx: Context, request: Request) => {
-	ctx.metrics.issuanceRequestTotal.inc({ version: ctx.env.VERSION_METADATA.id ?? RELEASE });
+export const handleTokenRequest = async (ctx: Context, request: Request): Promise<Response> => {
+	const contentType = request.headers.get('content-type');
+	if (!contentType) {
+		throw new HeaderNotDefinedError('"Content-Type" must be defined');
+	}
+
+	const domain = new URL(request.url).host;
 	const buffer = await request.arrayBuffer();
+
+	const result = await issue(ctx, buffer, domain, contentType);
+
+	return new Response(result.serialized, {
+		status: result.status ?? 200,
+		headers: {
+			'Content-Type': result.responseContentType,
+			'Content-Length': result.serialized.length.toString(),
+		},
+	});
+};
+
+export const handleSingleTokenRequest = async (
+	ctx: Context,
+	buffer: ArrayBuffer,
+	domain: string
+): Promise<Uint8Array> => {
+	// Deserialize the token request from the raw bytes.
 	const tokenRequest = TokenRequest.deserialize(TOKEN_TYPES.BLIND_RSA, new Uint8Array(buffer));
 
 	if (tokenRequest.tokenType !== TOKEN_TYPES.BLIND_RSA.value) {
@@ -78,73 +111,51 @@ export const handleSingleTokenRequest = async (ctx: Context, request: Request) =
 
 	const keyID = tokenRequest.truncatedTokenKeyId;
 	const { sk, pk } = await getBlindRSAKeyPair(ctx, keyID);
-	const domain = new URL(request.url).host;
 	const issuer = new Issuer(BlindRSAMode.PSS, domain, sk, pk, { supportsRSARAW: true });
 	const signedToken = await issuer.issue(tokenRequest);
+
+	ctx.metrics.issuanceRequestTotal.inc({ version: ctx.env.VERSION_METADATA.id ?? RELEASE });
 	ctx.metrics.signedTokenTotal.inc({ key_id: keyID });
 
-	// too verbose with workers observability
-	// once there is a way to filter logpush based on log level, we can consider re-enabling
-	// console.debug(`Token issued successfully for key ${keyID}`);
-
-	return new Response(signedToken.serialize(), {
-		headers: { 'content-type': MediaType.PRIVATE_TOKEN_RESPONSE },
-	});
+	return signedToken.serialize();
 };
 
-const handleBatchedTokenRequest = async (ctx: Context, request: Request): Promise<Response> => {
-	try {
-		// Read request body
-		const buffer = await request.arrayBuffer();
+export const handleBatchedTokenRequest = async (
+	ctx: Context,
+	buffer: ArrayBuffer,
+	domain: string
+): Promise<{ serialized: Uint8Array; status: number }> => {
+	// Deserialize the batched token request.
+	const batchedTokenRequest = BatchedTokenRequest.deserialize(new Uint8Array(buffer));
 
-		// Deserialize the batched token request
-		const batchedTokenRequest = BatchedTokenRequest.deserialize(new Uint8Array(buffer));
-
-		if (batchedTokenRequest.tokenRequests.length === 0) {
-			const responseBytes = new BatchedTokenResponse([]).serialize();
-			return new Response(responseBytes, {
-				headers: { 'Content-Type': MediaType.ARBITRARY_BATCHED_TOKEN_RESPONSE },
-			});
-		}
-
-		// Extract key ID and validate token requests
-		const keyID = batchedTokenRequest.tokenRequests[0].truncatedTokenKeyId;
-
-		for (let i = 0; i < batchedTokenRequest.tokenRequests.length; i++) {
-			const tokenRequest = batchedTokenRequest.tokenRequests[i];
-
-			if (tokenRequest.tokenType !== TOKEN_TYPES.BLIND_RSA.value) {
-				throw new InvalidBatchedTokenTypeError();
-			}
-			if (tokenRequest.truncatedTokenKeyId !== keyID) {
-				throw new MismatchedTokenKeyIDError();
-			}
-		}
-
-		// Retrieve key pair
-		const { sk, pk } = await getBlindRSAKeyPair(ctx, keyID);
-
-		const domain = new URL(request.url).host;
-		const issuer = new Issuer(BlindRSAMode.PSS, domain, sk, pk, { supportsRSARAW: true });
-
-		const batchedTokenIssuer = new BatchedTokensIssuer(issuer);
-		const batchedTokenResponse = await batchedTokenIssuer.issue(batchedTokenRequest);
-		const responseBytes = batchedTokenResponse.serialize();
-
-		// Determine if any token response is empty (null) and set the appropriate status code
-		const partial = batchedTokenResponse.tokenResponses.some(resp => resp.tokenResponse === null);
-		const status = partial ? 206 : 200;
-
-		return new Response(responseBytes, {
-			status,
-			headers: {
-				'Content-Type': MediaType.ARBITRARY_BATCHED_TOKEN_RESPONSE,
-				'Content-Length': responseBytes.length.toString(),
-			},
-		});
-	} catch (error) {
-		return new Response('Internal Server Error', { status: 500 });
+	if (batchedTokenRequest.tokenRequests.length === 0) {
+		const responseBytes = new BatchedTokenResponse([]).serialize();
+		return { serialized: responseBytes, status: 200 };
 	}
+
+	const keyID = batchedTokenRequest.tokenRequests[0].truncatedTokenKeyId;
+
+	// Validate each token request in the batch.
+	for (const tokenReq of batchedTokenRequest.tokenRequests) {
+		if (tokenReq.tokenType !== TOKEN_TYPES.BLIND_RSA.value) {
+			throw new InvalidBatchedTokenTypeError();
+		}
+		if (tokenReq.truncatedTokenKeyId !== keyID) {
+			throw new MismatchedTokenKeyIDError();
+		}
+	}
+
+	const { sk, pk } = await getBlindRSAKeyPair(ctx, keyID);
+	const issuer = new Issuer(BlindRSAMode.PSS, domain, sk, pk, { supportsRSARAW: true });
+	const batchedTokenIssuer = new BatchedTokensIssuer(issuer);
+	const batchedTokenResponse = await batchedTokenIssuer.issue(batchedTokenRequest);
+	const responseBytes = batchedTokenResponse.serialize();
+
+	// Set status code based on whether any token response is null.
+	const partial = batchedTokenResponse.tokenResponses.some(resp => resp.tokenResponse === null);
+	const status = partial ? 206 : 200;
+
+	return { serialized: responseBytes, status };
 };
 
 const getBlindRSAKeyPair = async (
@@ -295,7 +306,7 @@ export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 	return response;
 };
 
-export const handleRotateKey = async (ctx: Context, _request?: Request) => {
+export const handleRotateKey = async (ctx: Context, _request: Request) => {
 	ctx.metrics.keyRotationTotal.inc();
 
 	// Generate a new type 2 Issuer key
@@ -344,7 +355,7 @@ export const handleRotateKey = async (ctx: Context, _request?: Request) => {
 	return new Response(`New key ${publicKeyEnc}`, { status: 201 });
 };
 
-export const handleClearKey = async (ctx: Context, _request?: Request) => {
+export const handleClearKey = async (ctx: Context, _request: Request) => {
 	ctx.metrics.keyClearTotal.inc();
 
 	const keys = await ctx.bucket.ISSUANCE_KEYS.list({ shouldUseCache: false });
@@ -397,10 +408,16 @@ export const handleClearKey = async (ctx: Context, _request?: Request) => {
 	return new Response(`Keys cleared: ${toDeleteArray.join('\n')}`, { status: 201 });
 };
 
-export default {
-	async fetch(request: Request, env: Bindings, ctx: ExecutionContext) {
-		// router defines all API endpoints
-		// this ease testing, as test can be performed on specific handler methods, not necessardily e2e
+export class IssuerHandler extends WorkerEntrypoint<Bindings> {
+	private context(url: string, prefix: string): Context {
+		const env = this.env;
+		const ectx = this.ctx;
+
+		const sampleRequest = new Request(url);
+		return Router.buildContext(sampleRequest, env, ectx, prefix);
+	}
+
+	async fetch(request: Request): Promise<Response> {
 		const router = new Router();
 
 		router
@@ -411,27 +428,41 @@ export default {
 
 		return router.handle(
 			request as Request<Bindings, IncomingRequestCfProperties<unknown>>,
-			env,
-			ctx
+			this.env,
+			this.ctx
 		);
-	},
+	}
 
-	async scheduled(event: ScheduledEvent, env: Bindings, ectx: ExecutionContext) {
-		const sampleRequest = new Request(`https://schedule.example.com`);
-		const ctx = new Context(
-			sampleRequest,
-			env,
-			ectx.waitUntil.bind(ectx),
-			new ConsoleLogger(),
-			new MetricsRegistry(env),
-			new WshimLogger(sampleRequest, env)
-		);
-		const date = new Date(event.scheduledTime);
+	async tokenDirectory(url: string, prefix: string): Promise<Response> {
+		const ctx = this.context(url, prefix);
+		return await handleTokenDirectory(ctx, new Request(url));
+	}
 
-		if (shouldRotateKey(date, env)) {
-			await handleRotateKey(ctx);
-		} else {
-			await handleClearKey(ctx);
-		}
+	async issue(
+		url: string,
+		tokenRequest: ArrayBufferLike,
+		contentType: string | undefined,
+		prefix: string
+	): Promise<{ serialized: Uint8Array; status?: number; responseContentType: string }> {
+		const ctx = this.context(url, prefix);
+		const domain = new URL(url).host;
+		return issue(ctx, tokenRequest, domain, contentType);
+	}
+
+	async rotateKey(url: string, prefix: string): Promise<Response> {
+		const ctx = this.context(url, prefix);
+		return handleRotateKey(ctx, new Request(url));
+	}
+
+	async clearKey(url: string, prefix: string): Promise<Response> {
+		const ctx = this.context(url, prefix);
+		return await handleClearKey(ctx, new Request(url));
+	}
+}
+
+export default {
+	async fetch(request: Request, env: Bindings, ctx: ExecutionContext) {
+		const issuerHandler = new IssuerHandler(ctx, env);
+		return issuerHandler.fetch(request);
 	},
 };

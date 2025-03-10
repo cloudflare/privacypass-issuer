@@ -96,12 +96,16 @@ export class Router {
 		return this.registerMethod(HttpMethod.PUT, path, handler);
 	}
 
-	private buildContext(request: Request, env: Bindings, ectx: ExecutionContext): Context {
-		// Prometheus Registry should be unique per request
+	// Prometheus Registry should be unique per request
+	static buildContext(
+		request: Request,
+		env: Bindings,
+		ectx: ExecutionContext,
+		prefix?: string
+	): Context {
 		const metrics = new MetricsRegistry(env);
 		const wshimLogger = new WshimLogger(request, env);
 
-		// Use a flexible reporter, so that it uses console.log when debugging, and Core Sentry when in production
 		let logger: Logger;
 		if (!env.SENTRY_SAMPLE_RATE || parseFloat(env.SENTRY_SAMPLE_RATE) === 0) {
 			logger = new ConsoleLogger();
@@ -122,7 +126,16 @@ export class Router {
 				coloName: request?.cf?.colo as string,
 			});
 		}
-		return new Context(request, env, ectx.waitUntil.bind(ectx), logger, metrics, wshimLogger);
+
+		return new Context(
+			request,
+			env,
+			ectx.waitUntil.bind(ectx),
+			logger,
+			metrics,
+			wshimLogger,
+			prefix
+		);
 	}
 
 	private async postProcessing(ctx: Context) {
@@ -136,7 +149,7 @@ export class Router {
 		env: Bindings,
 		ectx: ExecutionContext
 	): Promise<Response> {
-		const ctx = this.buildContext(request, env, ectx);
+		const ctx = Router.buildContext(request, env, ectx);
 		const rawPath = new URL(request.url).pathname;
 		const path = this.normalisePath(rawPath);
 		ctx.metrics.requestsTotal.inc({ path });

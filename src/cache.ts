@@ -307,12 +307,15 @@ export interface CachedR2BucketOptions {
 
 export class CachedR2Bucket {
 	private bucket: R2Bucket;
+	private prefix: string;
 	constructor(
 		private ctx: Context,
 		bucket: R2Bucket,
 		private cache: ReadableCache,
+		prefix: string = '',
 		private ttl_in_ms = DEFAULT_R2_BUCKET_CACHE_TTL_IN_MS
 	) {
+		this.prefix = prefix;
 		this.bucket = new Proxy(bucket, {
 			get: (target, prop, receiver) => {
 				const method = Reflect.get(target, prop, receiver);
@@ -338,14 +341,21 @@ export class CachedR2Bucket {
 
 	// WARNING: key should be lowered than 1024 bytes
 	// See https://developers.cloudflare.com/r2/reference/limits/
+
+	// Helper to add the prefix stored in the bucket instance.
+	private addPrefix(key: string): string {
+		return this.prefix ? `${this.prefix}/${key}` : key;
+	}
+
 	head(key: string, options?: CachedR2BucketOptions): Promise<CachedR2Object | null> {
+		const prefixedKey = this.addPrefix(key);
 		if (!this.shouldUseCache(options)) {
-			return this.bucket.head(key);
+			return this.bucket.head(prefixedKey);
 		}
 
-		const cacheKey = `head/${key}`;
+		const cacheKey = `head/${prefixedKey}`;
 		return this.cache.read(cacheKey, async () => {
-			const object = await this.bucket.head(key);
+			const object = await this.bucket.head(prefixedKey);
 			if (object === null) {
 				return { value: null, expiration: new Date() };
 			}
@@ -358,13 +368,19 @@ export class CachedR2Bucket {
 	}
 
 	list(options?: R2ListOptions & CachedR2BucketOptions): Promise<CachedR2Objects> {
-		if (!this.shouldUseCache(options)) {
-			return this.bucket.list(options);
+		// Ensure the list options include the prefix from the bucket if not already provided.
+		const actualOptions: R2ListOptions = { ...options };
+		if (!actualOptions.prefix && this.prefix) {
+			actualOptions.prefix = this.prefix;
 		}
 
-		const cacheKey = `list/${JSON.stringify(options)}`;
+		if (!this.shouldUseCache(options)) {
+			return this.bucket.list(actualOptions);
+		}
+
+		const cacheKey = `list/${JSON.stringify(actualOptions)}`;
 		return this.cache.read(cacheKey, async () => {
-			const objects = await this.bucket.list(options);
+			const objects = await this.bucket.list(actualOptions);
 			const value = new CachedR2Objects(objects);
 			return {
 				value,
@@ -379,13 +395,14 @@ export class CachedR2Bucket {
 		key: string,
 		options?: R2GetOptions & CachedR2BucketOptions
 	): Promise<CachedR2Object | null> {
+		const prefixedKey = this.addPrefix(key);
 		if (!this.shouldUseCache(options)) {
-			return this.bucket.get(key, options);
+			return this.bucket.get(prefixedKey, options);
 		}
 
-		const cacheKey = `get/${key}`;
+		const cacheKey = `get/${prefixedKey}`;
 		return this.cache.read(cacheKey, async () => {
-			const object = await this.bucket.get(key, options);
+			const object = await this.bucket.get(prefixedKey, options);
 			if (object === null) {
 				return { value: null, expiration: new Date() };
 			}
@@ -400,12 +417,24 @@ export class CachedR2Bucket {
 	put(
 		...args: Parameters<typeof R2Bucket.prototype.put>
 	): ReturnType<typeof R2Bucket.prototype.put> {
+		// Only apply prefix if the first argument is a valid key string
+		if (args.length > 0 && typeof args[0] === 'string') {
+			args[0] = this.addPrefix(args[0]);
+		}
 		return this.bucket.put(...args);
 	}
 
 	delete(
 		...args: Parameters<typeof R2Bucket.prototype.delete>
 	): ReturnType<typeof R2Bucket.prototype.delete> {
+		// Only apply prefix if the first argument is a valid key string
+		if (args.length > 0) {
+			if (Array.isArray(args[0])) {
+				args[0] = args[0].map((key: string) => this.addPrefix(key));
+			} else if (typeof args[0] === 'string') {
+				args[0] = this.addPrefix(args[0]);
+			}
+		}
 		return this.bucket.delete(...args);
 	}
 }
