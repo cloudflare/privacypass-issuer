@@ -399,15 +399,6 @@ export const handleClearKey = async (ctx: Context, request: Request, prefix: str
 	return new Response(`Keys cleared: ${toDeleteArray.join('\n')}`, { status: 201 });
 };
 
-// const VALID_PATHS = new Set([
-// 	'/.well-known/token-issuer-directory',
-// 	'/token-request',
-// 	'/admin/rotate',
-// 	'/admin/clear',
-// 	'/',
-// 	PRIVATE_TOKEN_ISSUER_DIRECTORY,
-// ]);
-
 
 export class IssuerHandler extends WorkerEntrypoint<Bindings> {
 	private context(url: string): Context {
