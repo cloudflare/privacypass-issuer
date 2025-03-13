@@ -17,7 +17,11 @@ const HttpMethod = {
 	PUT: 'PUT',
 } as const;
 
-type ExportedHandlerFetchHandler = (ctx: Context, request: Request, prefix: string) => Response | Promise<Response>;
+type ExportedHandlerFetchHandler = (
+	ctx: Context,
+	request: Request,
+	prefix: string
+) => Response | Promise<Response>;
 type HttpMethod = (typeof HttpMethod)[keyof typeof HttpMethod];
 
 // Simple router
@@ -123,7 +127,6 @@ export class Router {
 
 		return new Context(request, env, ectx.waitUntil.bind(ectx), logger, metrics, wshimLogger);
 	}
-
 
 	private async postProcessing(ctx: Context) {
 		// wait for async tasks to complete before reporting metrics

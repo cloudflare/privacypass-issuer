@@ -23,8 +23,7 @@ import {
 	arbitraryBatched,
 	util,
 } from '@cloudflare/privacypass-ts';
-import { ConsoleLogger, WshimLogger } from './context/logging';
-import { KeyError, MetricsRegistry } from './context/metrics';
+import { KeyError } from './context/metrics';
 import { hexEncode } from './utils/hex';
 import {
 	DIRECTORY_CACHE_REQUEST,
@@ -35,7 +34,7 @@ import {
 const { BlindRSAMode, Issuer, TokenRequest } = publicVerif;
 const { BatchedTokenRequest, BatchedTokenResponse, Issuer: BatchedTokensIssuer } = arbitraryBatched;
 
-import { shouldRotateKey, shouldClearKey } from './utils/keyRotation';
+import { shouldClearKey } from './utils/keyRotation';
 import { WorkerEntrypoint } from 'cloudflare:workers';
 
 const keyToTokenKeyID = async (key: Uint8Array): Promise<number> => {
@@ -50,7 +49,7 @@ interface StorageMetadata extends Record<string, string> {
 	tokenKeyID: string;
 }
 
-export const handleTokenRequest = async (ctx: Context, request: Request, prefix: string) => {
+export const handleTokenRequest = async (ctx: Context, request: Request, prefix: string = '') => {
 	const contentType = request.headers.get('content-type');
 
 	if (!contentType) {
@@ -218,7 +217,11 @@ const getBlindRSAKeyPair = async (
 	return { sk, pk };
 };
 
-export const handleHeadTokenDirectory = async (ctx: Context, request: Request, prefix: string = '') => {
+export const handleHeadTokenDirectory = async (
+	ctx: Context,
+	request: Request,
+	prefix: string = ''
+) => {
 	const getResponse = await handleTokenDirectory(ctx, request, prefix);
 
 	return new Response(undefined, {
@@ -227,7 +230,7 @@ export const handleHeadTokenDirectory = async (ctx: Context, request: Request, p
 	});
 };
 
-export const handleTokenDirectory = async (ctx: Context, request: Request, prefix: string) => {
+export const handleTokenDirectory = async (ctx: Context, request: Request, prefix: string = '') => {
 	const cache = await getDirectoryCache();
 	let cachedResponse: Response | undefined;
 	try {
@@ -266,7 +269,7 @@ export const handleTokenDirectory = async (ctx: Context, request: Request, prefi
 			'token-key': (key.customMetadata as StorageMetadata).publicKey,
 			'not-before': Number.parseInt(
 				(key.customMetadata as StorageMetadata).notBefore ??
-				(new Date(key.uploaded).getTime() / 1000).toFixed(0)
+					(new Date(key.uploaded).getTime() / 1000).toFixed(0)
 			),
 		})),
 	};
@@ -297,7 +300,7 @@ export const handleTokenDirectory = async (ctx: Context, request: Request, prefi
 	return response;
 };
 
-export const handleRotateKey = async (ctx: Context, request: Request, prefix: string) => {
+export const handleRotateKey = async (ctx: Context, request: Request, prefix: string = '') => {
 	ctx.metrics.keyRotationTotal.inc();
 
 	// Generate a new type 2 Issuer key
@@ -346,7 +349,11 @@ export const handleRotateKey = async (ctx: Context, request: Request, prefix: st
 	return new Response(`New key ${publicKeyEnc}`, { status: 201 });
 };
 
-export const handleClearKey = async (ctx: Context, request: Request, prefix: string) => {
+export const handleClearKey = async (
+	ctx: Context,
+	request: Request | undefined = undefined,
+	prefix: string = ''
+) => {
 	ctx.metrics.keyClearTotal.inc();
 
 	const keys = await ctx.bucket.ISSUANCE_KEYS.list({ shouldUseCache: false });
@@ -425,35 +432,22 @@ export class IssuerHandler extends WorkerEntrypoint<Bindings> {
 		);
 	}
 
-	async tokenDirectory(
-		url: string,
-		prefix: string = "",
-	): Promise<Response> {
+	async tokenDirectory(url: string, prefix: string = ''): Promise<Response> {
 		const ctx = this.context(url);
 		return await handleTokenDirectory(ctx, new Request(url), prefix);
 	}
 
-	async issue(
-		url: string,
-		tokenRequest: Request,
-		prefix: string = ""
-	): Promise<Response> {
+	async issue(url: string, tokenRequest: Request, prefix: string = ''): Promise<Response> {
 		const ctx = this.context(url);
 		return handleTokenRequest(ctx, tokenRequest, prefix);
 	}
 
-	async rotateKey(
-		url: string,
-		prefix: string = ""
-	): Promise<Response> {
+	async rotateKey(url: string, prefix: string = ''): Promise<Response> {
 		const ctx = this.context(url);
 		return handleRotateKey(ctx, new Request(url), prefix);
 	}
 
-	async clearKey(
-		url: string,
-		prefix: string = ""
-	): Promise<Response> {
+	async clearKey(url: string, prefix: string = ''): Promise<Response> {
 		const ctx = this.context(url);
 		return await handleClearKey(ctx, new Request(url), prefix);
 	}
