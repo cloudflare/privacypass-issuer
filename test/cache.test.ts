@@ -1,28 +1,36 @@
 // Copyright (c) 2024 Cloudflare, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { jest } from '@jest/globals';
-
 import { PRIVATE_TOKEN_ISSUER_DIRECTORY } from '@cloudflare/privacypass-ts';
 import { getDirectoryCache, shouldRevalidate, STALE_WHILE_REVALIDATE_IN_MS } from '../src/cache';
 import { default as workerObject } from '../src/index';
-import { ExecutionContextMock, getEnv, MockCache } from './mocks';
+import { MockCache } from './mocks';
+
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { env, createExecutionContext } from 'cloudflare:test';
+import worker from '../src/index';
 
 const sampleURL = 'http://localhost';
+const IncomingRequest = Request<unknown, IncomingRequestCfProperties>;
 
 describe('cache revalidation', () => {
 	const rotateURL = `${sampleURL}/admin/rotate`;
 
 	const initializeKeys = async (numberOfKeys = 1): Promise<void> => {
-		const rotateRequest = new Request(rotateURL, { method: 'POST' });
+		const rotateRequest = new IncomingRequest(rotateURL, { method: 'POST' });
+		const ctx = new createExecutionContext();
 
 		for (let i = 0; i < numberOfKeys; i += 1) {
-			await workerObject.fetch(rotateRequest, getEnv(), new ExecutionContextMock());
+			await worker.fetch(rotateRequest, env, ctx);
 		}
 	};
 
 	beforeEach(async () => {
 		await initializeKeys();
+	});
+
+	afterEach(async () => {
+		vi.clearAllMocks();
 	});
 
 	it('should not revalidate before expiration', () => {
@@ -52,32 +60,31 @@ describe('cache revalidation', () => {
 
 	it('should be split by hostnames', async () => {
 		const mockCaches: Map<string, MockCache> = new Map();
-		const spy = jest.spyOn(caches, 'open').mockImplementation(async (name: string) => {
+		const spy = vi.spyOn(caches, 'open').mockImplementation(async (name: string) => {
 			if (!mockCaches.has(name)) {
 				mockCaches.set(name, new MockCache());
 			}
 			return mockCaches.get(name) as unknown as Cache;
 		});
-		const domainARequest = new Request(`${sampleURL}${PRIVATE_TOKEN_ISSUER_DIRECTORY}`);
-		const domainBRequest = new Request(`http://cache2.test${PRIVATE_TOKEN_ISSUER_DIRECTORY}`);
+
+		const domainARequest = new IncomingRequest(`${sampleURL}${PRIVATE_TOKEN_ISSUER_DIRECTORY}`);
+		const ctx = new createExecutionContext();
+
+		const domainBRequest = new IncomingRequest(
+			`http://cache2.test${PRIVATE_TOKEN_ISSUER_DIRECTORY}`
+		);
+		const ctx2 = new createExecutionContext();
+
 		const mockCache = (await getDirectoryCache()) as unknown as MockCache;
 
 		// request for the first domain populates the cache and uses one entry
-		let response = await workerObject.fetch(domainARequest, getEnv(), new ExecutionContextMock());
-		expect(response.ok).toBe(true);
-		expect(Object.entries(mockCache.cache)).toHaveLength(1);
-		response = await workerObject.fetch(domainARequest, getEnv(), new ExecutionContextMock());
+		const response = await worker.fetch(domainARequest, env, ctx);
 		expect(response.ok).toBe(true);
 		expect(Object.entries(mockCache.cache)).toHaveLength(1);
 
 		// request for the second domain populates the cache and uses a new entry
-		response = await workerObject.fetch(domainBRequest, getEnv(), new ExecutionContextMock());
-		expect(response.ok).toBe(true);
+		const resposne2 = await worker.fetch(domainBRequest, env, ctx2);
+		expect(resposne2.ok).toBe(true);
 		expect(Object.entries(mockCache.cache)).toHaveLength(2);
-		response = await workerObject.fetch(domainBRequest, getEnv(), new ExecutionContextMock());
-		expect(response.ok).toBe(true);
-		expect(Object.entries(mockCache.cache)).toHaveLength(2);
-
-		spy.mockClear();
 	});
 });

@@ -11,10 +11,8 @@ async function testCommand(
 	mTLS?: MTLSConfiguration
 ) {
 	const validIssuer = await testE2E(issuerName, numOfTokens, requestType, mTLS);
-	if (validIssuer) {
-		console.log('Issuer tokens are valid');
-	} else {
-		console.error('Issuer tokens are not valid');
+	if (!validIssuer) {
+		throw new Error('Issuer tokens are not valid');
 	}
 }
 
@@ -59,7 +57,6 @@ async function main() {
 					if (options.rotate) {
 						await rotateCommand(issuerName);
 					} else {
-						console.log('in in this branch');
 						await testCommand(issuerName, numOfTokens, requestType);
 					}
 				}
