@@ -15,6 +15,8 @@ declare global {
 		publicExponent: Uint8Array;
 	}
 
+	type KeyFormat = 'jwk' | 'pkcs8' | 'raw' | 'spki';
+
 	type KeyUsage =
 		| 'encrypt'
 		| 'decrypt'

@@ -126,6 +126,17 @@ export class InvalidTokenTypeError extends HTTPError {
 	}
 }
 
+export class InvalidBatchedTokenTypeError extends HTTPError {
+	static CODE = 'ERROR_INVALID_TOKEN_TYPE';
+	code: string;
+
+	constructor(message = 'Invalid token type') {
+		super(message, 422);
+		this.name = 'InvalidTokenTypeError';
+		this.code = InvalidTokenTypeError.CODE;
+	}
+}
+
 export class BadTokenKeyRequestedError extends HTTPError {
 	static CODE = 'ERROR_BAD_TOKEN_KEY_REQUESTED';
 	code: string;
@@ -134,5 +145,27 @@ export class BadTokenKeyRequestedError extends HTTPError {
 		super(message, 400);
 		this.name = 'BadTokenKeyRequestedError';
 		this.code = BadTokenKeyRequestedError.CODE;
+	}
+}
+
+export class InvalidContentTypeError extends HTTPError {
+	static CODE = 'ERROR_INVALID_CONTENT_TYPE';
+	code: string;
+
+	constructor(message = 'Invalid content type') {
+		super(message, 422);
+		this.name = 'InvalidContentTypeError';
+		this.code = InvalidContentTypeError.CODE;
+	}
+}
+
+export class MismatchedTokenKeyIDError extends HTTPError {
+	static CODE = 'ERROR_MISMATCHED_TOKEN_KEY_ID';
+	code: string;
+
+	constructor(message = 'Batched token request must have the same key ID') {
+		super(message, 400);
+		this.name = 'MismatchedTokenKeyIDError';
+		this.code = MismatchedTokenKeyIDError.CODE;
 	}
 }

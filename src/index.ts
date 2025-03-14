@@ -9,6 +9,9 @@ import {
 	HeaderNotDefinedError,
 	InternalCacheError,
 	InvalidTokenTypeError,
+	InvalidBatchedTokenTypeError,
+	InvalidContentTypeError,
+	MismatchedTokenKeyIDError,
 } from './errors';
 import { IssuerConfigurationResponse, TokenType } from './types';
 import { b64ToB64URL, b64Tou8, b64URLtoB64, u8ToB64 } from './utils/base64';
@@ -17,6 +20,7 @@ import {
 	PRIVATE_TOKEN_ISSUER_DIRECTORY,
 	TOKEN_TYPES,
 	publicVerif,
+	arbitraryBatched,
 	util,
 } from '@cloudflare/privacypass-ts';
 import { ConsoleLogger, WshimLogger } from './context/logging';
@@ -29,6 +33,7 @@ import {
 	getDirectoryCache,
 } from './cache';
 const { BlindRSAMode, Issuer, TokenRequest } = publicVerif;
+const { BatchedTokenRequest, BatchedTokenResponse, Issuer: BatchedTokensIssuer } = arbitraryBatched;
 
 import { shouldRotateKey, shouldClearKey } from './utils/keyRotation';
 
@@ -47,10 +52,23 @@ interface StorageMetadata extends Record<string, string> {
 export const handleTokenRequest = async (ctx: Context, request: Request) => {
 	ctx.metrics.issuanceRequestTotal.inc({ version: ctx.env.VERSION_METADATA.id ?? RELEASE });
 	const contentType = request.headers.get('content-type');
-	if (!contentType || contentType !== MediaType.PRIVATE_TOKEN_REQUEST) {
-		throw new HeaderNotDefinedError(`"Content-Type" must be "${MediaType.PRIVATE_TOKEN_REQUEST}"`);
+
+	if (!contentType) {
+		throw new HeaderNotDefinedError('"Content-Type" must be defined');
 	}
 
+	switch (contentType) {
+		case MediaType.PRIVATE_TOKEN_REQUEST:
+			return handleSingleTokenRequest(ctx, request);
+		case MediaType.ARBITRARY_BATCHED_TOKEN_REQUEST:
+			return handleBatchedTokenRequest(ctx, request);
+		default:
+			throw new InvalidContentTypeError(`Invalid content type: ${contentType}`);
+	}
+};
+
+export const handleSingleTokenRequest = async (ctx: Context, request: Request) => {
+	ctx.metrics.issuanceRequestTotal.inc({ version: ctx.env.VERSION_METADATA.id ?? RELEASE });
 	const buffer = await request.arrayBuffer();
 	const tokenRequest = TokenRequest.deserialize(TOKEN_TYPES.BLIND_RSA, new Uint8Array(buffer));
 
@@ -58,22 +76,96 @@ export const handleTokenRequest = async (ctx: Context, request: Request) => {
 		throw new InvalidTokenTypeError();
 	}
 
-	const keyID = tokenRequest.truncatedTokenKeyId.toString();
-	const key = await ctx.bucket.ISSUANCE_KEYS.get(keyID);
+	const keyID = tokenRequest.truncatedTokenKeyId;
+	const { sk, pk } = await getBlindRSAKeyPair(ctx, keyID);
+	const domain = new URL(request.url).host;
+	const issuer = new Issuer(BlindRSAMode.PSS, domain, sk, pk, { supportsRSARAW: true });
+	const signedToken = await issuer.issue(tokenRequest);
+	ctx.metrics.signedTokenTotal.inc({ key_id: keyID });
+
+	// too verbose with workers observability
+	// once there is a way to filter logpush based on log level, we can consider re-enabling
+	// console.debug(`Token issued successfully for key ${keyID}`);
+
+	return new Response(signedToken.serialize(), {
+		headers: { 'content-type': MediaType.PRIVATE_TOKEN_RESPONSE },
+	});
+};
+
+const handleBatchedTokenRequest = async (ctx: Context, request: Request): Promise<Response> => {
+	try {
+		// Read request body
+		const buffer = await request.arrayBuffer();
+
+		// Deserialize the batched token request
+		const batchedTokenRequest = BatchedTokenRequest.deserialize(new Uint8Array(buffer));
+
+		if (batchedTokenRequest.tokenRequests.length === 0) {
+			const responseBytes = new BatchedTokenResponse([]).serialize();
+			return new Response(responseBytes, {
+				headers: { 'Content-Type': MediaType.ARBITRARY_BATCHED_TOKEN_RESPONSE },
+			});
+		}
+
+		// Extract key ID and validate token requests
+		const keyID = batchedTokenRequest.tokenRequests[0].truncatedTokenKeyId;
+
+		for (let i = 0; i < batchedTokenRequest.tokenRequests.length; i++) {
+			const tokenRequest = batchedTokenRequest.tokenRequests[i];
+
+			if (tokenRequest.tokenType !== TOKEN_TYPES.BLIND_RSA.value) {
+				throw new InvalidBatchedTokenTypeError();
+			}
+			if (tokenRequest.truncatedTokenKeyId !== keyID) {
+				throw new MismatchedTokenKeyIDError();
+			}
+		}
+
+		// Retrieve key pair
+		const { sk, pk } = await getBlindRSAKeyPair(ctx, keyID);
+
+		const domain = new URL(request.url).host;
+		const issuer = new Issuer(BlindRSAMode.PSS, domain, sk, pk, { supportsRSARAW: true });
+
+		const batchedTokenIssuer = new BatchedTokensIssuer(issuer);
+		const batchedTokenResponse = await batchedTokenIssuer.issue(batchedTokenRequest);
+		const responseBytes = batchedTokenResponse.serialize();
+
+		// Determine if any token response is empty (null) and set the appropriate status code
+		const partial = batchedTokenResponse.tokenResponses.some(resp => resp.tokenResponse === null);
+		const status = partial ? 206 : 200;
+
+		return new Response(responseBytes, {
+			status,
+			headers: {
+				'Content-Type': MediaType.ARBITRARY_BATCHED_TOKEN_RESPONSE,
+				'Content-Length': responseBytes.length.toString(),
+			},
+		});
+	} catch (error) {
+		return new Response('Internal Server Error', { status: 500 });
+	}
+};
+
+const getBlindRSAKeyPair = async (
+	ctx: Context,
+	keyID: number
+): Promise<{ sk: CryptoKey; pk: CryptoKey }> => {
+	const key = await ctx.bucket.ISSUANCE_KEYS.get(keyID.toString());
 
 	if (key === null) {
 		ctx.metrics.issuanceKeyErrorTotal.inc({ key_id: keyID, type: KeyError.NOT_FOUND });
-		throw new BadTokenKeyRequestedError('No key found for the requested key id');
+		throw new BadTokenKeyRequestedError();
 	}
 
 	const CRYPTO_KEY_EXPIRATION_IN_MS = 300_000; // 5min
-
 	const cryptoKeyCache = new InMemoryCryptoKeyCache(ctx);
+
 	const sk = await cryptoKeyCache.read(`sk-${keyID}`, async keyID => {
 		const privateKey = key.data;
 		if (privateKey === undefined) {
 			ctx.metrics.issuanceKeyErrorTotal.inc({ key_id: keyID, type: KeyError.MISSING_PRIVATE_KEY });
-			throw new Error('No private key found for the requested key id');
+			throw new BadTokenKeyRequestedError('No private key found for the requested key id');
 		}
 		let sk: CryptoKey;
 		try {
@@ -88,47 +180,40 @@ export const handleTokenRequest = async (ctx: Context, request: Request) => {
 				true,
 				['sign']
 			);
+			return {
+				value: sk,
+				expiration: new Date(Date.now() + CRYPTO_KEY_EXPIRATION_IN_MS),
+			};
 		} catch (e) {
 			ctx.metrics.issuanceKeyErrorTotal.inc({ key_id: keyID, type: KeyError.INVALID_PRIVATE_KEY });
-			throw e;
+			throw new BadTokenKeyRequestedError('Invalid private key format');
 		}
-		return {
-			value: sk,
-			expiration: new Date(Date.now() + CRYPTO_KEY_EXPIRATION_IN_MS),
-		};
 	});
 	const pk = await cryptoKeyCache.read(`pk-${keyID}`, async keyID => {
 		const pkEnc = key?.customMetadata?.publicKey;
 		if (!pkEnc) {
 			ctx.metrics.issuanceKeyErrorTotal.inc({ key_id: keyID, type: KeyError.MISSING_PUBLIC_KEY });
-			throw new Error('No public key found for the requested key id');
+			throw new BadTokenKeyRequestedError('No public key found for the requested key id');
 		}
-		const pk = await crypto.subtle.importKey(
-			'spki',
-			util.convertRSASSAPSSToEnc(b64Tou8(b64URLtoB64(pkEnc))),
-			{ name: 'RSA-PSS', hash: 'SHA-384' },
-			true,
-			['verify']
-		);
-
-		return {
-			value: pk,
-			expiration: new Date(Date.now() + CRYPTO_KEY_EXPIRATION_IN_MS),
-		};
+		try {
+			const pk = await crypto.subtle.importKey(
+				'spki',
+				util.convertRSASSAPSSToEnc(b64Tou8(b64URLtoB64(pkEnc))),
+				{ name: 'RSA-PSS', hash: 'SHA-384' },
+				true,
+				['verify']
+			);
+			return {
+				value: pk,
+				expiration: new Date(Date.now() + CRYPTO_KEY_EXPIRATION_IN_MS),
+			};
+		} catch (e) {
+			ctx.metrics.issuanceKeyErrorTotal.inc({ key_id: keyID, type: KeyError.INVALID_PUBLIC_KEY });
+			throw new BadTokenKeyRequestedError('Invalid public key format');
+		}
 	});
 
-	const domain = new URL(request.url).host;
-	const issuer = new Issuer(BlindRSAMode.PSS, domain, sk, pk, { supportsRSARAW: true });
-	const signedToken = await issuer.issue(tokenRequest);
-	ctx.metrics.signedTokenTotal.inc({ key_id: keyID });
-
-	// too verbose with workers observability
-	// once there is a way to filter logpush based on log level, we can consider re-enabling
-	// console.debug(`Token issued successfully for key ${keyID}`);
-
-	return new Response(signedToken.serialize(), {
-		headers: { 'content-type': MediaType.PRIVATE_TOKEN_RESPONSE },
-	});
+	return { sk, pk };
 };
 
 export const handleHeadTokenDirectory = async (ctx: Context, request: Request) => {

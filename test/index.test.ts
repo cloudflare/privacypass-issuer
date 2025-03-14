@@ -21,12 +21,20 @@ import {
 	MediaType,
 	PRIVATE_TOKEN_ISSUER_DIRECTORY,
 	publicVerif,
-	TOKEN_TYPES,
+	arbitraryBatched,
 	util,
+	TokenChallenge,
+	TOKEN_TYPES,
 } from '@cloudflare/privacypass-ts';
 import { getDirectoryCache } from '../src/cache';
 import { shouldRotateKey, shouldClearKey } from '../src/utils/keyRotation';
-const { TokenRequest } = publicVerif;
+const { TokenRequest, BLIND_RSA } = publicVerif;
+const {
+	TokenRequest: batchedTokenRequest,
+	Client: BatchedTokensClient,
+	BatchedTokenResponse,
+	BatchedTokenRequest,
+} = arbitraryBatched;
 
 const sampleURL = 'http://localhost';
 
@@ -45,16 +53,25 @@ describe('challenge handlers', () => {
 			publicExponent: Uint8Array.from([1, 0, 1]),
 			modulusLength: 2048,
 		});
-		const publicKey = new Uint8Array(
-			(await crypto.subtle.exportKey('spki', keypair.publicKey)) as ArrayBuffer
+
+		const publicKeyRaw = await crypto.subtle.exportKey('spki', keypair.publicKey);
+		const privateKeyRaw = await crypto.subtle.exportKey('pkcs8', keypair.privateKey);
+		const publicKeyBase64 = Buffer.from(new Uint8Array(publicKeyRaw as ArrayBuffer)).toString(
+			'base64'
 		);
-		const publicKeyEnc = b64ToB64URL(u8ToB64(util.convertEncToRSASSAPSS(publicKey)));
-		const tokenKey = await keyToTokenKeyID(new TextEncoder().encode(publicKeyEnc));
-		await ctx.env.ISSUANCE_KEYS.put(
-			tokenKey.toString(),
-			(await crypto.subtle.exportKey('pkcs8', keypair.privateKey)) as ArrayBuffer,
-			{ customMetadata: { publicKey: publicKeyEnc } }
+		const privateKeyBase64 = Buffer.from(new Uint8Array(privateKeyRaw as ArrayBuffer)).toString(
+			'base64'
 		);
+
+		// Convert the raw public key, then derive the key from the converted bytes.
+		const publicKeyRawBytes = Uint8Array.from(Buffer.from(publicKeyBase64, 'base64'));
+		const convertedPublicKey = util.convertEncToRSASSAPSS(publicKeyRawBytes);
+		const tokenKey = await keyToTokenKeyID(convertedPublicKey);
+
+		await ctx.env.ISSUANCE_KEYS.put(tokenKey.toString(), privateKeyRaw as ArrayBuffer, {
+			customMetadata: { publicKey: publicKeyBase64 },
+		});
+
 		return keypair;
 	};
 
@@ -73,12 +90,11 @@ describe('challenge handlers', () => {
 		const publicKeyExport = new Uint8Array(
 			(await crypto.subtle.exportKey('spki', publicKey)) as ArrayBuffer
 		);
-		const publicKeyU8 = util.convertEncToRSASSAPSS(publicKeyExport);
-		const publicKeyEnc = b64ToB64URL(u8ToB64(publicKeyU8));
-		const tokenKeyId = await keyToTokenKeyID(new TextEncoder().encode(publicKeyEnc));
+		const publicKeyConverted = util.convertEncToRSASSAPSS(publicKeyExport);
+		const tokenKeyId = await keyToTokenKeyID(publicKeyConverted);
 
 		// note that blindedMsg should be the payload and not the message directly
-		const tokenRequest = new TokenRequest(tokenKeyId, blindedMsg, TOKEN_TYPES.BLIND_RSA);
+		const tokenRequest = new TokenRequest(tokenKeyId, blindedMsg, BLIND_RSA);
 
 		const request = new Request(tokenRequestURL, {
 			method: 'POST',
@@ -96,10 +112,77 @@ describe('challenge handlers', () => {
 		const isValid = await suite.verify(publicKey, signature, preparedMsg);
 		expect(isValid).toBe(true);
 	});
+
+	it('should return a Privacy Pass token response when provided with a valid batched Privacy Pass token request', async () => {
+		const ctx = getContext({
+			request: new Request(sampleURL),
+			env: getEnv(),
+			ectx: new ExecutionContextMock(),
+		});
+
+		const msgString = 'Hello World!';
+		const message = new TextEncoder().encode(msgString);
+		const preparedMsg = suite.prepare(message);
+		const { publicKey } = await mockPrivateKey(ctx);
+		const publicKeyExport = new Uint8Array(
+			(await crypto.subtle.exportKey('spki', publicKey)) as ArrayBuffer
+		);
+		const publicKeyConverted = util.convertEncToRSASSAPSS(publicKeyExport);
+		const tokenKeyId = await keyToTokenKeyID(publicKeyConverted);
+
+		const nTokens = 2;
+		const invs: Uint8Array[] = [];
+
+		const tokReqs = new Array<publicVerif.TokenRequest>(nTokens);
+		const batchedTokenReqs = new Array<arbitraryBatched.TokenRequest>(nTokens);
+
+		for (let i = 0; i < nTokens; i++) {
+			const { blindedMsg, inv } = await suite.blind(publicKey, preparedMsg);
+			tokReqs[i] = new publicVerif.TokenRequest(tokenKeyId, blindedMsg, BLIND_RSA);
+			batchedTokenReqs[i] = new arbitraryBatched.TokenRequest(tokReqs[i]);
+			invs.push(inv);
+		}
+
+		const batchedTokenRequest = new arbitraryBatched.BatchedTokenRequest(batchedTokenReqs);
+		const request = new Request(tokenRequestURL, {
+			method: 'POST',
+			headers: { 'content-type': MediaType.ARBITRARY_BATCHED_TOKEN_REQUEST },
+			body: batchedTokenRequest.serialize(),
+		});
+
+		const response = await handleTokenRequest(ctx, request);
+		expect(response.status).toBe(200); // Could be 206 if some tokens failed
+		expect(response.headers.get('content-type')).toBe(MediaType.ARBITRARY_BATCHED_TOKEN_RESPONSE);
+
+		const responseBytes = new Uint8Array(await response.arrayBuffer());
+		const batchedTokenResponse = arbitraryBatched.BatchedTokenResponse.deserialize(responseBytes);
+
+		expect(batchedTokenResponse.tokenResponses.length).toBe(nTokens);
+
+		// Verify each issued token
+		for (let i = 0; i < nTokens; i++) {
+			const tokenResponse = batchedTokenResponse.tokenResponses[i];
+			expect(tokenResponse.tokenResponse).not.toBeNull();
+
+			const blindSignature = tokenResponse.tokenResponse!;
+			const signature = await suite.finalize(publicKey, preparedMsg, blindSignature, invs[i]);
+
+			const isValid = await suite.verify(publicKey, signature, preparedMsg);
+			expect(isValid).toBe(true);
+		}
+	});
 });
 
 describe('non existing handler', () => {
 	const nonExistingURL = `${sampleURL}/non-existing`;
+
+	beforeEach(() => {
+		jest.spyOn(console, 'error').mockImplementation(() => {});
+	});
+
+	afterEach(() => {
+		(console.error as jest.Mock).mockRestore();
+	});
 
 	it('should return 404 when a non GET existing endpoint is requested', async () => {
 		const request = new Request(nonExistingURL);
@@ -199,7 +282,8 @@ describe('directory', () => {
 		env.MINIMUM_FRESHEST_KEYS = NUMBER_OF_KEYS_GENERATED.toFixed();
 		await initializeKeys(NUMBER_OF_KEYS_GENERATED);
 
-		const response = await workerObject.fetch(directoryRequest, env, new ExecutionContextMock());
+		const exct = new ExecutionContextMock();
+		const response = await workerObject.fetch(directoryRequest, env, exct);
 		expect(response.ok).toBe(true);
 
 		const directory = (await response.json()) as IssuerConfig;
