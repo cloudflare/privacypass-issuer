@@ -6,7 +6,7 @@
 		"lib": ["es2020"],
 		"strict": true,
 		"preserveConstEnums": true,
-		"moduleResolution": "node",
+		"moduleResolution": "bundler",
 		"sourceMap": true,
 		"types": ["@cloudflare/workers-types"],
 		"esModuleInterop": true

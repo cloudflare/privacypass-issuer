@@ -52,7 +52,7 @@ export class Context {
 	}
 
 	isTest(): boolean {
-		return RELEASE === 'test';
+		return this.hostname.includes('localhost-e2e');
 	}
 
 	/**

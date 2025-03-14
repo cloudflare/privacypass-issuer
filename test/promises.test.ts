@@ -1,10 +1,11 @@
 // Copyright (c) 2023 Cloudflare, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { jest } from '@jest/globals';
-
 import { asyncRetries, DEFAULT_RETRIES } from '../src/utils/promises';
-import { ExecutionContextMock, getContext, getEnv } from './mocks';
+import { env, createExecutionContext } from 'cloudflare:test';
+import { vi } from 'vitest';
+import { getContext } from './mocks';
+import { describe, beforeEach, it, expect } from 'vitest';
 
 const sampleURL = 'http://localhost';
 
@@ -26,14 +27,19 @@ describe('asyncRetries', () => {
 		};
 	}
 
-	it('should work for a promise always resolving', async () => {
-		const ctx = getContext({
-			request: new Request(sampleURL),
-			env: getEnv(),
-			ectx: new ExecutionContextMock(),
-		});
+	let ctx: any;
 
-		const f = jest.fn(() => Promise.resolve(sampleResolve));
+	beforeEach(() => {
+		ctx = createExecutionContext();
+		ctx.metrics = {
+			asyncRetriesTotal: {
+				inc: vi.fn(),
+			},
+		};
+	});
+
+	it('should work for a promise always resolving', async () => {
+		const f = vi.fn(() => Promise.resolve(sampleResolve));
 		const retriesF = asyncRetries(ctx, f);
 
 		expect(await retriesF()).toBe(sampleResolve);
@@ -41,13 +47,7 @@ describe('asyncRetries', () => {
 	});
 
 	it('should work for a promise failing once', async () => {
-		const ctx = getContext({
-			request: new Request(sampleURL),
-			env: getEnv(),
-			ectx: new ExecutionContextMock(),
-		});
-
-		const f = jest.fn(generateRejectsBeforeResolvePromise(1, sampleResolve, sampleReject));
+		const f = vi.fn(generateRejectsBeforeResolvePromise(1, sampleResolve, sampleReject));
 		const retriesF = asyncRetries(ctx, f);
 
 		expect(await retriesF()).toBe(sampleResolve);
@@ -56,13 +56,7 @@ describe('asyncRetries', () => {
 
 	it('should reject for a promise failing twice and retry count at 2', async () => {
 		const retryCount = DEFAULT_RETRIES;
-		const ctx = getContext({
-			request: new Request(sampleURL),
-			env: getEnv(),
-			ectx: new ExecutionContextMock(),
-		});
-
-		const f = jest.fn(generateRejectsBeforeResolvePromise(retryCount, sampleResolve, sampleReject));
+		const f = vi.fn(generateRejectsBeforeResolvePromise(retryCount, sampleResolve, sampleReject));
 		const retriesF = asyncRetries(ctx, f, retryCount);
 
 		try {
@@ -75,13 +69,8 @@ describe('asyncRetries', () => {
 
 	it('should work for a promise failing twice and retry count at 3', async () => {
 		const retryCount = 3;
-		const ctx = getContext({
-			request: new Request(sampleURL),
-			env: getEnv(),
-			ectx: new ExecutionContextMock(),
-		});
 
-		const f = jest.fn(
+		const f = vi.fn(
 			generateRejectsBeforeResolvePromise(retryCount - 1, sampleResolve, sampleReject)
 		);
 		const retriesF = asyncRetries(ctx, f, retryCount);
@@ -91,13 +80,7 @@ describe('asyncRetries', () => {
 	});
 
 	it('should reject a promise always failing', async () => {
-		const ctx = getContext({
-			request: new Request(sampleURL),
-			env: getEnv(),
-			ectx: new ExecutionContextMock(),
-		});
-
-		const f = jest.fn(() => Promise.reject(sampleReject));
+		const f = vi.fn(() => Promise.reject(sampleReject));
 		const retriesF = asyncRetries(ctx, f);
 
 		try {

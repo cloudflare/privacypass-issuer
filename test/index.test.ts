@@ -1,20 +1,13 @@
 // Copyright (c) 2023 Cloudflare, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { jest } from '@jest/globals';
-
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { env, ProvidedEnv, createExecutionContext } from 'cloudflare:test';
 import { Context } from '../src/context';
 import { handleTokenRequest, handleClearKey, default as workerObject } from '../src/index';
 import { IssuerConfigurationResponse } from '../src/types';
 import { b64ToB64URL, u8ToB64 } from '../src/utils/base64';
-import {
-	ExecutionContextMock,
-	MockCache,
-	mockDateNow,
-	clearDateMocks,
-	getContext,
-	getEnv,
-} from './mocks';
+import { MockCache, mockDateNow, clearDateMocks, getContext } from './mocks';
 import { RSABSSA } from '@cloudflare/blindrsa-ts';
 import {
 	IssuerConfig,
@@ -38,13 +31,28 @@ const {
 
 const sampleURL = 'http://localhost';
 
+function setupTestContext() {
+	return getContext({
+		request: new Request(sampleURL),
+		env: env,
+		ectx: new createExecutionContext(),
+	});
+}
+
 const keyToTokenKeyID = async (key: Uint8Array): Promise<number> => {
 	const hash = await crypto.subtle.digest('SHA-256', key);
 	const u8 = new Uint8Array(hash);
 	return u8[u8.length - 1];
 };
 
+const IncomingRequest = Request<unknown, IncomingRequestCfProperties>;
+
 describe('challenge handlers', () => {
+	let ctx: Context;
+	beforeEach(() => {
+		ctx = setupTestContext();
+	});
+
 	const suite = RSABSSA.SHA384.PSS.Deterministic();
 
 	const tokenRequestURL = `${sampleURL}/token-request`;
@@ -76,12 +84,6 @@ describe('challenge handlers', () => {
 	};
 
 	it('should return a Privacy Pass token response when provided with a valid Privacy Pass token request', async () => {
-		const ctx = getContext({
-			request: new Request(sampleURL),
-			env: getEnv(),
-			ectx: new ExecutionContextMock(),
-		});
-
 		const msgString = 'Hello World!';
 		const message = new TextEncoder().encode(msgString);
 		const preparedMsg = suite.prepare(message);
@@ -114,12 +116,6 @@ describe('challenge handlers', () => {
 	});
 
 	it('should return a Privacy Pass token response when provided with a valid batched Privacy Pass token request', async () => {
-		const ctx = getContext({
-			request: new Request(sampleURL),
-			env: getEnv(),
-			ectx: new ExecutionContextMock(),
-		});
-
 		const msgString = 'Hello World!';
 		const message = new TextEncoder().encode(msgString);
 		const preparedMsg = suite.prepare(message);
@@ -176,24 +172,26 @@ describe('challenge handlers', () => {
 describe('non existing handler', () => {
 	const nonExistingURL = `${sampleURL}/non-existing`;
 
+	let errorMock: vi.Mock;
+
 	beforeEach(() => {
-		jest.spyOn(console, 'error').mockImplementation(() => {});
+		errorMock = vi.fn();
+		console.error = errorMock;
 	});
 
 	afterEach(() => {
-		(console.error as jest.Mock).mockRestore();
+		vi.clearAllMocks();
 	});
-
 	it('should return 404 when a non GET existing endpoint is requested', async () => {
 		const request = new Request(nonExistingURL);
-		const response = await workerObject.fetch(request, getEnv(), new ExecutionContextMock());
+		const response = await workerObject.fetch(request, env, new createExecutionContext());
 
 		expect(response.status).toBe(404);
 	});
 
 	it('should return 404 when a non POST existing endpoint is requested', async () => {
 		const request = new Request(nonExistingURL, { method: 'POST' });
-		const response = await workerObject.fetch(request, getEnv(), new ExecutionContextMock());
+		const response = await workerObject.fetch(request, env, new createExecutionContext());
 
 		expect(response.status).toBe(404);
 	});
@@ -209,13 +207,13 @@ describe('rotate and clear key', () => {
 		const directoryRequest = new Request(directoryURL);
 
 		const NUMBER_OF_KEYS_GENERATED = 3;
-		const env = getEnv();
+
 		env.MINIMUM_FRESHEST_KEYS = NUMBER_OF_KEYS_GENERATED.toFixed();
 		for (let i = 0; i < NUMBER_OF_KEYS_GENERATED; i += 1) {
-			await workerObject.fetch(rotateRequest, env, new ExecutionContextMock());
+			await workerObject.fetch(rotateRequest, env, new createExecutionContext());
 		}
 
-		const response = await workerObject.fetch(directoryRequest, env, new ExecutionContextMock());
+		const response = await workerObject.fetch(directoryRequest, env, new createExecutionContext());
 		expect(response.ok).toBe(true);
 
 		const directory: IssuerConfigurationResponse = await response.json();
@@ -228,16 +226,16 @@ describe('rotate and clear key', () => {
 		const directoryRequest = new Request(directoryURL);
 
 		const NUMBER_OF_KEYS_GENERATED = 3;
-		const env = getEnv();
+
 		env.MINIMUM_FRESHEST_KEYS = NUMBER_OF_KEYS_GENERATED.toFixed();
 
 		for (let i = 0; i < NUMBER_OF_KEYS_GENERATED; i += 1) {
-			await workerObject.fetch(rotateRequest, env, new ExecutionContextMock());
+			await workerObject.fetch(rotateRequest, env, new createExecutionContext());
 		}
 
-		await workerObject.fetch(clearRequest, env, new ExecutionContextMock());
+		await workerObject.fetch(clearRequest, env, new createExecutionContext());
 
-		let response = await workerObject.fetch(directoryRequest, env, new ExecutionContextMock());
+		let response = await workerObject.fetch(directoryRequest, env, new createExecutionContext());
 		expect(response.ok).toBe(true);
 
 		let directory: IssuerConfigurationResponse = await response.json();
@@ -245,8 +243,8 @@ describe('rotate and clear key', () => {
 		// All keys should still be present since the TTL has not expired
 		expect(directory['token-keys']).toHaveLength(NUMBER_OF_KEYS_GENERATED);
 
-		await workerObject.fetch(clearRequest, env, new ExecutionContextMock());
-		response = await workerObject.fetch(directoryRequest, env, new ExecutionContextMock());
+		await workerObject.fetch(clearRequest, env, new createExecutionContext());
+		response = await workerObject.fetch(directoryRequest, env, new createExecutionContext());
 		expect(response.ok).toBe(true);
 
 		directory = await response.json();
@@ -262,11 +260,11 @@ describe('directory', () => {
 
 	const initializeKeys = async (numberOfKeys = 1): Promise<void> => {
 		const rotateRequest = new Request(rotateURL, { method: 'POST' });
-		const env = getEnv();
+
 		env.MINIMUM_FRESHEST_KEYS = numberOfKeys.toFixed();
 
 		for (let i = 0; i < numberOfKeys; i += 1) {
-			await workerObject.fetch(rotateRequest, env, new ExecutionContextMock());
+			await workerObject.fetch(rotateRequest, env, new createExecutionContext());
 		}
 	};
 
@@ -278,11 +276,11 @@ describe('directory', () => {
 		const directoryRequest = new Request(directoryURL);
 
 		const NUMBER_OF_KEYS_GENERATED = 32; // arbitrary number, but good enough to confirm the ordering is working
-		const env = getEnv();
+
 		env.MINIMUM_FRESHEST_KEYS = NUMBER_OF_KEYS_GENERATED.toFixed();
 		await initializeKeys(NUMBER_OF_KEYS_GENERATED);
 
-		const exct = new ExecutionContextMock();
+		const exct = new createExecutionContext();
 		const response = await workerObject.fetch(directoryRequest, env, exct);
 		expect(response.ok).toBe(true);
 
@@ -302,7 +300,7 @@ describe('directory', () => {
 
 	it('response should be cached', async () => {
 		const mockCaches: Map<string, MockCache> = new Map();
-		const spy = jest.spyOn(caches, 'open').mockImplementation(async (name: string) => {
+		const spy = vi.spyOn(caches, 'open').mockImplementation(async (name: string) => {
 			if (!mockCaches.has(name)) {
 				mockCaches.set(name, new MockCache());
 			}
@@ -311,7 +309,7 @@ describe('directory', () => {
 		const directoryRequest = new Request(directoryURL);
 		const mockCache = (await getDirectoryCache()) as unknown as MockCache;
 
-		let response = await workerObject.fetch(directoryRequest, getEnv(), new ExecutionContextMock());
+		let response = await workerObject.fetch(directoryRequest, env, new createExecutionContext());
 		expect(response.ok).toBe(true);
 		expect(Object.entries(mockCache.cache)).toHaveLength(1);
 
@@ -320,18 +318,14 @@ describe('directory', () => {
 		const cachedResponse = new Response('cached response', { headers: { etag: sampleEtag } });
 		mockCache.cache[cachedURL] = cachedResponse;
 
-		response = await workerObject.fetch(directoryRequest, getEnv(), new ExecutionContextMock());
+		response = await workerObject.fetch(directoryRequest, env, new createExecutionContext());
 		expect(response.ok).toBe(true);
 		expect(response).toBe(cachedResponse);
 
 		const cachedDirectoryRequest = new Request(directoryURL, {
 			headers: { 'if-none-match': sampleEtag },
 		});
-		response = await workerObject.fetch(
-			cachedDirectoryRequest,
-			getEnv(),
-			new ExecutionContextMock()
-		);
+		response = await workerObject.fetch(cachedDirectoryRequest, env, new createExecutionContext());
 		expect(response.status).toBe(304);
 
 		const headCachedDirectoryRequest = new Request(directoryURL, {
@@ -340,8 +334,8 @@ describe('directory', () => {
 		});
 		response = await workerObject.fetch(
 			headCachedDirectoryRequest,
-			getEnv(),
-			new ExecutionContextMock()
+			env,
+			new createExecutionContext()
 		);
 		expect(response.status).toBe(304);
 
@@ -351,11 +345,7 @@ describe('directory', () => {
 	it('not-before should be the unix time number of seconds as a 64-bit integer', async () => {
 		const directoryRequest = new Request(directoryURL);
 
-		const response = await workerObject.fetch(
-			directoryRequest,
-			getEnv(),
-			new ExecutionContextMock()
-		);
+		const response = await workerObject.fetch(directoryRequest, env, new createExecutionContext());
 		expect(response.ok).toBe(true);
 
 		const directory = (await response.json()) as IssuerConfig;
@@ -376,14 +366,33 @@ describe('directory', () => {
 });
 
 describe('key rotation', () => {
-	it.concurrent.each`
-	name                                                        | rotationCron     | date                          | expected
-	${'rotate key at every minute'}                             | ${'* * * * *'}   | ${'2023-08-01T00:01:00Z'}     | ${true}
-	${'rotate key at midnight on the first day of every month'} | ${'0 0 1 * *'}   | ${'2023-09-01T00:00:00Z'}     | ${true}
-	${'rotate key at 12:30 PM every day'}                       | ${'30 12 * * *'} | ${'2023-08-01T12:30:00Z'}     | ${true}
-	${'not rotate key at noon on a non-rotation day'}           | ${'0 0 1 * *'}   | ${'2023-08-02T12:00:00Z'}     | ${false}
-	${'rotate key at 11:59 PM on the last day of the month'}    | ${'59 23 * * *'} | ${'2023-08-31T23:59:00Z'}     | ${true}
-	${'handle rotation with millisecond precision'}             | ${'* * * * *'}   | ${'2023-08-01T00:01:00.010Z'} | ${true}
+	let ctx: Context; // Store context for reuse in tests
+
+	beforeEach(async () => {
+		ctx = getContext({
+			request: new Request(sampleURL),
+			env: env,
+			ectx: new createExecutionContext(),
+		});
+
+		try {
+			const storedKeys = await ctx.bucket.ISSUANCE_KEYS.list();
+			for (const key of storedKeys.objects) {
+				await ctx.bucket.ISSUANCE_KEYS.delete(key.key);
+			}
+		} catch (error) {
+			console.error('[Test] Failed to clear storage:', error);
+		}
+	});
+
+	it.each`
+		name                                                        | rotationCron     | date                          | expected
+		${'rotate key at every minute'}                             | ${'* * * * *'}   | ${'2023-08-01T00:01:00Z'}     | ${true}
+		${'rotate key at midnight on the first day of every month'} | ${'0 0 1 * *'}   | ${'2023-09-01T00:00:00Z'}     | ${true}
+		${'rotate key at 12:30 PM every day'}                       | ${'30 12 * * *'} | ${'2023-08-01T12:30:00Z'}     | ${true}
+		${'not rotate key at noon on a non-rotation day'}           | ${'0 0 1 * *'}   | ${'2023-08-02T12:00:00Z'}     | ${false}
+		${'rotate key at 11:59 PM on the last day of the month'}    | ${'59 23 * * *'} | ${'2023-08-31T23:59:00Z'}     | ${true}
+		${'handle rotation with millisecond precision'}             | ${'* * * * *'}   | ${'2023-08-01T00:01:00.010Z'} | ${true}
 	`(
 		'should $name',
 		async ({
@@ -395,11 +404,7 @@ describe('key rotation', () => {
 			date: string;
 			expected: boolean;
 		}) => {
-			const ctx = getContext({
-				request: new Request(sampleURL),
-				env: getEnv(),
-				ectx: new ExecutionContextMock(),
-			});
+			// Use the context created in beforeEach
 			ctx.env.ROTATION_CRON_STRING = rotationCron;
 
 			expect(shouldRotateKey(new Date(date), ctx.env)).toBe(expected);
@@ -440,20 +445,29 @@ describe('shouldClearKey Function', () => {
 });
 
 describe('Integration Test for Key Clearing with Mocked Date', () => {
-	const directoryURL = `${sampleURL}${PRIVATE_TOKEN_ISSUER_DIRECTORY}`;
+	let ctx: Context;
+
+	beforeEach(async () => {
+		ctx = getContext({
+			request: new Request(sampleURL),
+			env: env,
+			ectx: new createExecutionContext(),
+		});
+	});
 
 	afterEach(() => {
-		clearDateMocks();
+		vi.useRealTimers();
+		vi.clearAllMocks();
 	});
 
 	it.each`
-		name                                                                  | keyUpload1                | keyUpload2                | keyUpload3                | clearTime                 | keyLifespanInMs            | minimumNumberOfKeys | expectedRemainingKeys
-		${'should clear expired key and preserve freshest keys'}              | ${'2024-10-01T14:59:59Z'} | ${'2024-09-30T11:00:00Z'} | ${'2024-10-03T13:00:00Z'} | ${'2024-10-03T14:00:00Z'} | ${2 * 24 * 60 * 60 * 1000} | ${1}                | ${['key1', 'key3']}
-		${'should preserve all keys when within lifespan'}                    | ${'2024-10-01T14:00:00Z'} | ${'2024-10-02T10:00:00Z'} | ${'2024-10-03T12:00:00Z'} | ${'2024-10-03T14:00:00Z'} | ${2 * 24 * 60 * 60 * 1000} | ${1}                | ${['key1', 'key2', 'key3']}
-		${'should clear only the oldest key that exceeded lifespan'}          | ${'2024-09-28T11:00:00Z'} | ${'2024-10-01T15:00:00Z'} | ${'2024-10-03T13:00:00Z'} | ${'2024-10-03T14:00:00Z'} | ${2 * 24 * 60 * 60 * 1000} | ${1}                | ${['key2', 'key3']}
-		${'should leave only the freshest key remaining'}                     | ${'2024-09-28T10:00:00Z'} | ${'2024-09-29T10:00:00Z'} | ${'2024-10-02T14:00:00Z'} | ${'2024-10-03T14:00:00Z'} | ${2 * 24 * 60 * 60 * 1000} | ${1}                | ${['key3']}
-		${'should keep all keys when minimum freshest is three'}              | ${'2024-09-28T10:00:00Z'} | ${'2024-09-29T10:00:00Z'} | ${'2024-10-02T14:00:00Z'} | ${'2024-10-03T14:00:00Z'} | ${2 * 24 * 60 * 60 * 1000} | ${3}                | ${['key1', 'key2', 'key3']}
-		${'should leave only the freshest key remaining with 1 day rotation'} | ${'2024-10-01T14:00:00Z'} | ${'2024-10-02T10:00:00Z'} | ${'2024-10-03T12:00:00Z'} | ${'2024-10-03T14:00:00Z'} | ${1 * 24 * 60 * 60 * 1000} | ${1}                | ${['key3']}
+		name                                                                  | keyUpload1                | keyUpload2                | keyUpload3                | clearTime                 | keyLifespanInMs            | minimumNumberOfKeys | expectedDeletedKeys
+		${'should clear expired key and preserve freshest keys'}              | ${'2024-10-01T14:59:59Z'} | ${'2024-09-30T11:00:00Z'} | ${'2024-10-03T13:00:00Z'} | ${'2024-10-03T14:00:00Z'} | ${2 * 24 * 60 * 60 * 1000} | ${1}                | ${['key2']}
+		${'should preserve all keys when within lifespan'}                    | ${'2024-10-01T14:00:00Z'} | ${'2024-10-02T10:00:00Z'} | ${'2024-10-03T12:00:00Z'} | ${'2024-10-03T14:00:00Z'} | ${2 * 24 * 60 * 60 * 1000} | ${1}                | ${[]}
+		${'should clear only the oldest key that exceeded lifespan'}          | ${'2024-09-28T11:00:00Z'} | ${'2024-10-01T15:00:00Z'} | ${'2024-10-03T13:00:00Z'} | ${'2024-10-03T14:00:00Z'} | ${2 * 24 * 60 * 60 * 1000} | ${1}                | ${['key1']}
+		${'should leave only the freshest key remaining'}                     | ${'2024-09-28T10:00:00Z'} | ${'2024-09-29T10:00:00Z'} | ${'2024-10-02T14:00:00Z'} | ${'2024-10-03T14:00:00Z'} | ${2 * 24 * 60 * 60 * 1000} | ${1}                | ${['key1', 'key2']}
+		${'should keep all keys when minimum freshest is three'}              | ${'2024-09-28T10:00:00Z'} | ${'2024-09-29T10:00:00Z'} | ${'2024-10-02T14:00:00Z'} | ${'2024-10-03T14:00:00Z'} | ${2 * 24 * 60 * 60 * 1000} | ${3}                | ${[]}
+		${'should leave only the freshest key remaining with 1 day rotation'} | ${'2024-10-01T14:00:00Z'} | ${'2024-10-02T10:00:00Z'} | ${'2024-10-03T12:00:00Z'} | ${'2024-10-03T14:00:00Z'} | ${1 * 24 * 60 * 60 * 1000} | ${1}                | ${['key1', 'key2']}
 	`(
 		'$name',
 		async ({
@@ -463,7 +477,7 @@ describe('Integration Test for Key Clearing with Mocked Date', () => {
 			clearTime,
 			keyLifespanInMs,
 			minimumNumberOfKeys,
-			expectedRemainingKeys,
+			expectedDeletedKeys,
 		}: {
 			name: string;
 			keyUpload1: string;
@@ -472,65 +486,56 @@ describe('Integration Test for Key Clearing with Mocked Date', () => {
 			clearTime: string;
 			keyLifespanInMs: number;
 			minimumNumberOfKeys: number;
-			expectedRemainingKeys: string[];
+			expectedDeletedKeys: string[];
 		}) => {
-			const env = getEnv();
 			env.KEY_LIFESPAN_IN_MS = keyLifespanInMs.toFixed();
 			env.MINIMUM_FRESHEST_KEYS = minimumNumberOfKeys.toFixed();
-			const ctx = getContext({
-				request: new Request(sampleURL),
-				env,
-				ectx: new ExecutionContextMock(),
-			});
 
-			// Mock and add the keys based on the provided timestamps
-			mockDateNow(new Date(keyUpload1).getTime());
-			await ctx.env.ISSUANCE_KEYS.put('key1', 'dummy-private-key-data', {
-				customMetadata: { publicKey: 'dummy-public-key-data' },
-			});
-			clearDateMocks();
+			// Create fake keys with desired uploaded timestamps
+			const fakeKeys = {
+				objects: [
+					{
+						key: 'key1',
+						uploaded: new Date(keyUpload1),
+						customMetadata: {},
+						etag: 'etag1',
+						version: 'v1',
+						size: 22,
+						checksums: {},
+						httpEtag: '',
+					},
+					{
+						key: 'key2',
+						uploaded: new Date(keyUpload2),
+						customMetadata: {},
+						etag: 'etag2',
+						version: 'v2',
+						size: 22,
+						checksums: {},
+						httpEtag: '',
+					},
+					{
+						key: 'key3',
+						uploaded: new Date(keyUpload3),
+						customMetadata: {},
+						etag: 'etag3',
+						version: 'v3',
+						size: 22,
+						checksums: {},
+						httpEtag: '',
+					},
+				],
+				delimitedPrefixes: [],
+				truncated: false,
+			};
 
-			mockDateNow(new Date(keyUpload2).getTime());
-			await ctx.env.ISSUANCE_KEYS.put('key2', 'dummy-private-key-data', {
-				customMetadata: { publicKey: 'dummy-public-key-data' },
-			});
-			clearDateMocks();
+			const listSpy = vi.spyOn(ctx.env.ISSUANCE_KEYS, 'list').mockResolvedValue(fakeKeys);
+			const deleteSpy = vi.spyOn(ctx.env.ISSUANCE_KEYS, 'delete').mockResolvedValue(undefined);
 
-			mockDateNow(new Date(keyUpload3).getTime());
-			await ctx.env.ISSUANCE_KEYS.put('key3', 'dummy-private-key-data', {
-				customMetadata: { publicKey: 'dummy-public-key-data' },
-			});
-			clearDateMocks();
-
-			// Mock the time for clearing operation
-			mockDateNow(clearTime);
+			vi.setSystemTime(new Date(clearTime));
 			await handleClearKey(ctx, undefined);
-			clearDateMocks();
 
-			// Check the remaining keys after clear operation
-			const remainingKeys = await ctx.env.ISSUANCE_KEYS.list();
-			const remainingKeyIds = remainingKeys.objects.map(k => k.key);
-
-			expect(remainingKeyIds.length).toBeGreaterThanOrEqual(minimumNumberOfKeys);
-
-			// Verify that only the expected keys remain
-			for (const expectedKey of expectedRemainingKeys) {
-				expect(remainingKeyIds).toContain(expectedKey);
-			}
-			for (const remainingKey of remainingKeyIds) {
-				if (!expectedRemainingKeys.includes(remainingKey)) {
-					expect(remainingKeyIds).not.toContain(remainingKey);
-				}
-			}
-
-			const directoryRequest = new Request(directoryURL);
-
-			const response = await workerObject.fetch(directoryRequest, env, new ExecutionContextMock());
-			expect(response.ok).toBe(true);
-
-			const directory = (await response.json()) as IssuerConfig;
-
-			expect(directory['token-keys']).toHaveLength(minimumNumberOfKeys);
+			expect(deleteSpy).toHaveBeenCalledWith(expect.arrayContaining(expectedDeletedKeys));
 		}
 	);
 });

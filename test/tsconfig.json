@@ -1,11 +1,10 @@
 {
     "extends": "../tsconfig.json",
     "compilerOptions": {
-		"esModuleInterop": true,
+        "esModuleInterop": true,
         "types": [
-            "@cloudflare/workers-types",
-            "jest",
-            "jest-environment-miniflare/globals"
+            "@cloudflare/workers-types/experimental",
+            "@cloudflare/vitest-pool-workers",
         ]
     },
     "include": [

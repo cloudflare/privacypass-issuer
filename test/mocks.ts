@@ -5,7 +5,8 @@ import { Bindings } from '../src/bindings';
 import { Context, WaitUntilFunc } from '../src/context';
 import { ConsoleLogger, Logger, WshimLogger } from '../src/context/logging';
 import { MetricsRegistry } from '../src/context/metrics';
-import { jest } from '@jest/globals';
+import { env, ProvidedEnv, createExecutionContext } from 'cloudflare:test';
+import { vi } from 'vitest';
 
 export class MockCache implements Cache {
 	public cache: Record<string, Response> = {};
@@ -35,23 +36,9 @@ export class MockCache implements Cache {
 	}
 }
 
-export class ExecutionContextMock implements ExecutionContext {
-	waitUntils: Promise<any>[] = [];
-	passThrough = false;
-
-	waitUntil(promise: Promise<any>): void {
-		this.waitUntils.push(promise);
-	}
-	passThroughOnException(): void {
-		this.passThrough = true;
-	}
-}
-
-export const getEnv = (): Bindings => getMiniflareBindings();
-
 export interface MockContextOptions {
 	request: Request;
-	env: Bindings;
+	env: ProvidedEnv;
 	ectx: ExecutionContext;
 	logger?: Logger;
 	metrics?: MetricsRegistry;
@@ -74,19 +61,6 @@ export const getContext = (options: MockContextOptions): Context => {
 		wshimLogger
 	);
 
-	// Clear stored keys before each test
-	(async () => {
-		try {
-			const storedKeys = await context.bucket.ISSUANCE_KEYS.list();
-			for (const key of storedKeys.objects) {
-				await context.bucket.ISSUANCE_KEYS.delete(key.key);
-				console.log(`[Test] Deleted key: ${key.key}`);
-			}
-		} catch (error) {
-			console.error('[Test] Failed to clear storage:', error);
-		}
-	})();
-
 	return context;
 };
 
@@ -95,7 +69,7 @@ const originalDateConstructor = Date;
 
 export const mockDateNow = (...fixedTimeArg: ConstructorParameters<typeof Date>): void => {
 	const fixedTime = new originalDateConstructor(...fixedTimeArg).getTime();
-	global.Date.now = jest.fn(() => fixedTime);
+	global.Date.now = vi.fn(() => fixedTime);
 	global.Date = class extends Date {
 		constructor(...args: unknown[]) {
 			if (args.length === 0) {
