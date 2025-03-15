@@ -190,6 +190,8 @@ export class MetricsRegistry {
 	 * This function is a no-op in test and wrangler environements
 	 */
 	async publish(): Promise<void> {
+		if (!this.env.WSHIM_ENDPOINT) return;
+
 		await this.options.fetcher(this.options.endpoint, {
 			method: 'POST',
 			headers: {

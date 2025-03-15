@@ -239,6 +239,7 @@ export class WshimLogger {
 
 	public async flushLogs(): Promise<void> {
 		if (this.logs.length === 0) return;
+		if (!this.env.WSHIM_ENDPOINT) return;
 
 		const defaultFields = this.defaultFields();
 
