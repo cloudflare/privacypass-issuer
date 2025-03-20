@@ -23,8 +23,7 @@ import {
 	arbitraryBatched,
 	util,
 } from '@cloudflare/privacypass-ts';
-import { ConsoleLogger, WshimLogger } from './context/logging';
-import { KeyError, MetricsRegistry } from './context/metrics';
+import { KeyError } from './context/metrics';
 import { hexEncode } from './utils/hex';
 import {
 	DIRECTORY_CACHE_REQUEST,
@@ -35,7 +34,8 @@ import {
 const { BlindRSAMode, Issuer, TokenRequest } = publicVerif;
 const { BatchedTokenRequest, BatchedTokenResponse, Issuer: BatchedTokensIssuer } = arbitraryBatched;
 
-import { shouldRotateKey, shouldClearKey } from './utils/keyRotation';
+import { shouldClearKey } from './utils/keyRotation';
+import { WorkerEntrypoint } from 'cloudflare:workers';
 
 const keyToTokenKeyID = async (key: Uint8Array): Promise<number> => {
 	const hash = await crypto.subtle.digest('SHA-256', key);
@@ -49,8 +49,7 @@ interface StorageMetadata extends Record<string, string> {
 	tokenKeyID: string;
 }
 
-export const handleTokenRequest = async (ctx: Context, request: Request) => {
-	ctx.metrics.issuanceRequestTotal.inc({ version: ctx.env.VERSION_METADATA.id ?? RELEASE });
+export const handleTokenRequest = async (ctx: Context, request: Request, prefix: string = '') => {
 	const contentType = request.headers.get('content-type');
 
 	if (!contentType) {
@@ -70,6 +69,7 @@ export const handleTokenRequest = async (ctx: Context, request: Request) => {
 export const handleSingleTokenRequest = async (ctx: Context, request: Request) => {
 	ctx.metrics.issuanceRequestTotal.inc({ version: ctx.env.VERSION_METADATA.id ?? RELEASE });
 	const buffer = await request.arrayBuffer();
+	// const tokenRequest = TokenRequest.deserialize(TOKEN_TYPES.BLIND_RSA, new Uint8Array(request));
 	const tokenRequest = TokenRequest.deserialize(TOKEN_TYPES.BLIND_RSA, new Uint8Array(buffer));
 
 	if (tokenRequest.tokenType !== TOKEN_TYPES.BLIND_RSA.value) {
@@ -167,9 +167,9 @@ const getBlindRSAKeyPair = async (
 			ctx.metrics.issuanceKeyErrorTotal.inc({ key_id: keyID, type: KeyError.MISSING_PRIVATE_KEY });
 			throw new BadTokenKeyRequestedError('No private key found for the requested key id');
 		}
-		let sk: CryptoKey;
+
 		try {
-			sk = await crypto.subtle.importKey(
+			const sk = await crypto.subtle.importKey(
 				'pkcs8',
 				privateKey,
 				{
@@ -189,6 +189,7 @@ const getBlindRSAKeyPair = async (
 			throw new BadTokenKeyRequestedError('Invalid private key format');
 		}
 	});
+
 	const pk = await cryptoKeyCache.read(`pk-${keyID}`, async keyID => {
 		const pkEnc = key?.customMetadata?.publicKey;
 		if (!pkEnc) {
@@ -216,8 +217,12 @@ const getBlindRSAKeyPair = async (
 	return { sk, pk };
 };
 
-export const handleHeadTokenDirectory = async (ctx: Context, request: Request) => {
-	const getResponse = await handleTokenDirectory(ctx, request);
+export const handleHeadTokenDirectory = async (
+	ctx: Context,
+	request: Request,
+	prefix: string = ''
+) => {
+	const getResponse = await handleTokenDirectory(ctx, request, prefix);
 
 	return new Response(undefined, {
 		status: getResponse.status,
@@ -225,7 +230,7 @@ export const handleHeadTokenDirectory = async (ctx: Context, request: Request) =
 	});
 };
 
-export const handleTokenDirectory = async (ctx: Context, request: Request) => {
+export const handleTokenDirectory = async (ctx: Context, request: Request, prefix: string = '') => {
 	const cache = await getDirectoryCache();
 	let cachedResponse: Response | undefined;
 	try {
@@ -295,7 +300,7 @@ export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 	return response;
 };
 
-export const handleRotateKey = async (ctx: Context, _request?: Request) => {
+export const handleRotateKey = async (ctx: Context, request: Request, prefix: string = '') => {
 	ctx.metrics.keyRotationTotal.inc();
 
 	// Generate a new type 2 Issuer key
@@ -344,7 +349,11 @@ export const handleRotateKey = async (ctx: Context, _request?: Request) => {
 	return new Response(`New key ${publicKeyEnc}`, { status: 201 });
 };
 
-export const handleClearKey = async (ctx: Context, _request?: Request) => {
+export const handleClearKey = async (
+	ctx: Context,
+	request: Request | undefined = undefined,
+	prefix: string = ''
+) => {
 	ctx.metrics.keyClearTotal.inc();
 
 	const keys = await ctx.bucket.ISSUANCE_KEYS.list({ shouldUseCache: false });
@@ -397,10 +406,17 @@ export const handleClearKey = async (ctx: Context, _request?: Request) => {
 	return new Response(`Keys cleared: ${toDeleteArray.join('\n')}`, { status: 201 });
 };
 
-export default {
-	async fetch(request: Request, env: Bindings, ctx: ExecutionContext) {
-		// router defines all API endpoints
-		// this ease testing, as test can be performed on specific handler methods, not necessardily e2e
+
+export class IssuerHandler extends WorkerEntrypoint<Bindings> {
+	private context(url: string): Context {
+		const env = this.env;
+		const ectx = this.ctx;
+
+		const sampleRequest = new Request(url);
+		return Router.buildContext(sampleRequest, env, ectx);
+	}
+
+	async fetch(request: Request): Promise<Response> {
 		const router = new Router();
 
 		router
@@ -411,27 +427,35 @@ export default {
 
 		return router.handle(
 			request as Request<Bindings, IncomingRequestCfProperties<unknown>>,
-			env,
-			ctx
+			this.env,
+			this.ctx
 		);
-	},
+	}
 
-	async scheduled(event: ScheduledEvent, env: Bindings, ectx: ExecutionContext) {
-		const sampleRequest = new Request(`https://schedule.example.com`);
-		const ctx = new Context(
-			sampleRequest,
-			env,
-			ectx.waitUntil.bind(ectx),
-			new ConsoleLogger(),
-			new MetricsRegistry(env),
-			new WshimLogger(sampleRequest, env)
-		);
-		const date = new Date(event.scheduledTime);
+	async tokenDirectory(url: string, prefix: string = ''): Promise<Response> {
+		const ctx = this.context(url);
+		return await handleTokenDirectory(ctx, new Request(url), prefix);
+	}
 
-		if (shouldRotateKey(date, env)) {
-			await handleRotateKey(ctx);
-		} else {
-			await handleClearKey(ctx);
-		}
+	async issue(url: string, tokenRequest: Request, prefix: string = ''): Promise<Response> {
+		const ctx = this.context(url);
+		return handleTokenRequest(ctx, tokenRequest, prefix);
+	}
+
+	async rotateKey(url: string, prefix: string = ''): Promise<Response> {
+		const ctx = this.context(url);
+		return handleRotateKey(ctx, new Request(url), prefix);
+	}
+
+	async clearKey(url: string, prefix: string = ''): Promise<Response> {
+		const ctx = this.context(url);
+		return await handleClearKey(ctx, new Request(url), prefix);
+	}
+}
+
+export default {
+	async fetch(request: Request, env: Bindings, ctx: ExecutionContext) {
+		const issuerHandler = new IssuerHandler(ctx, env);
+		return issuerHandler.fetch(request);
 	},
 };
