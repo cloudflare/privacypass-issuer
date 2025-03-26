@@ -1,6 +1,9 @@
 // Copyright (c) 2023 Cloudflare, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+// eslint-disable-next-line @typescript-eslint/triple-slash-reference
+/// <reference path="./global.d.ts" />
+
 import { Bindings } from './bindings';
 import { Context } from './context';
 import { Router } from './router';
