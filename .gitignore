@@ -1,6 +1,18 @@
-dist
 node_modules
 transpiled
 coverage
 worker.mjs*
 .wrangler
+
+# Ignore everything inside dist/
+dist/*
+
+# Allow the folder structure for allowed file
+!dist/
+!dist/types/
+
+# Ignore all files inside dist/types...
+dist/types/*
+
+# ...except for our allowed file
+!dist/types/index.d.ts

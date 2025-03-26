@@ -9,7 +9,8 @@
 		"moduleResolution": "bundler",
 		"sourceMap": true,
 		"types": ["@cloudflare/workers-types"],
-		"esModuleInterop": true
+		"esModuleInterop": true,
+		"rootDir": "src"
 	},
 	"include": ["src"],
 	"exclude": ["node_modules", "dist", "test"]
