@@ -23,7 +23,7 @@ export class Context {
 		public logger: Logger,
 		public metrics: MetricsRegistry,
 		public wshimLogger: WshimLogger,
-		public prefix?: string
+		public prefix: string = ''
 	) {
 		// eslint-disable-next-line @typescript-eslint/no-this-alias
 		const ctx = this;
@@ -44,6 +44,7 @@ export class Context {
 		});
 
 		this.hostname = new URL(request.url).hostname;
+		this.prefix = prefix;
 		this.bucket = {
 			ISSUANCE_KEYS: cachedR2BucketWithRetries,
 		};
