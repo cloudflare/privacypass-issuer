@@ -2,6 +2,7 @@
 
 import { Performance as Performance$1, R2Bucket as R2Bucket$1, R2HTTPMetadata as R2HTTPMetadata$1, R2ListOptions as R2ListOptions$1 } from '@cloudflare/workers-types/2023-07-01';
 import { Breadcrumb } from '@sentry/types';
+import { WorkerEntrypoint } from 'cloudflare:workers';
 import { CounterType, HistogramType, RegistryType } from 'promjs-plus';
 
 // Copyright (c) 2023 Cloudflare, Inc.
@@ -83,8 +84,10 @@ declare class CachedR2Bucket {
 	private cache;
 	private ttl_in_ms;
 	private bucket;
-	constructor(ctx: Context, bucket: R2Bucket, cache: ReadableCache, ttl_in_ms?: number);
+	private prefix;
+	constructor(ctx: Context, bucket: R2Bucket, cache: ReadableCache, prefix?: string, ttl_in_ms?: number);
 	private shouldUseCache;
+	private addPrefix;
 	head(key: string, options?: CachedR2BucketOptions): Promise<CachedR2Object | null>;
 	list(options?: R2ListOptions$1 & CachedR2BucketOptions): Promise<CachedR2Objects>;
 	get(key: string, options?: R2GetOptions & CachedR2BucketOptions): Promise<CachedR2Object | null>;
@@ -153,6 +156,7 @@ declare class Context {
 	logger: Logger;
 	metrics: MetricsRegistry;
 	wshimLogger: WshimLogger;
+	prefix?: string | undefined;
 	hostname: string;
 	startTime: number;
 	private promises;
@@ -160,7 +164,7 @@ declare class Context {
 		ISSUANCE_KEYS: CachedR2Bucket;
 	};
 	performance: Performance;
-	constructor(request: Request, env: Bindings, _waitUntil: WaitUntilFunc, logger: Logger, metrics: MetricsRegistry, wshimLogger: WshimLogger);
+	constructor(request: Request, env: Bindings, _waitUntil: WaitUntilFunc, logger: Logger, metrics: MetricsRegistry, wshimLogger: WshimLogger, prefix?: string | undefined);
 	isTest(): boolean;
 	/**
 	 * Registers async tasks with the runtime, tracks them internally and adds error reporting for uncaught exceptions
@@ -175,15 +179,35 @@ declare class Context {
 	 */
 	waitForPromises(): Promise<void>;
 }
+export declare const issue: (ctx: Context, buffer: ArrayBuffer, domain: string, contentType?: string) => Promise<{
+	serialized: Uint8Array;
+	status?: number;
+	responseContentType: string;
+}>;
 export declare const handleTokenRequest: (ctx: Context, request: Request) => Promise<Response>;
-export declare const handleSingleTokenRequest: (ctx: Context, request: Request) => Promise<Response>;
+export declare const handleSingleTokenRequest: (ctx: Context, buffer: ArrayBuffer, domain: string) => Promise<Uint8Array>;
+export declare const handleBatchedTokenRequest: (ctx: Context, buffer: ArrayBuffer, domain: string) => Promise<{
+	serialized: Uint8Array;
+	status: number;
+}>;
 export declare const handleHeadTokenDirectory: (ctx: Context, request: Request) => Promise<Response>;
 export declare const handleTokenDirectory: (ctx: Context, request: Request) => Promise<Response>;
-export declare const handleRotateKey: (ctx: Context, _request?: Request) => Promise<Response>;
-export declare const handleClearKey: (ctx: Context, _request?: Request) => Promise<Response>;
+export declare const handleRotateKey: (ctx: Context, _request: Request) => Promise<Response>;
+export declare const handleClearKey: (ctx: Context, _request: Request) => Promise<Response>;
+export declare class IssuerHandler extends WorkerEntrypoint<Bindings> {
+	private context;
+	fetch(request: Request): Promise<Response>;
+	tokenDirectory(url: string, prefix: string): Promise<Response>;
+	issue(url: string, tokenRequest: ArrayBufferLike, contentType: string | undefined, prefix: string): Promise<{
+		serialized: Uint8Array;
+		status?: number;
+		responseContentType: string;
+	}>;
+	rotateKey(url: string, prefix: string): Promise<Response>;
+	clearKey(url: string, prefix: string): Promise<Response>;
+}
 declare const _default: {
 	fetch(request: Request, env: Bindings, ctx: ExecutionContext): Promise<Response>;
-	scheduled(event: ScheduledEvent, env: Bindings, ectx: ExecutionContext): Promise<void>;
 };
 
 export {
