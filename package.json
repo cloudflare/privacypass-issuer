@@ -36,7 +36,7 @@
 	},
 	"devDependencies": {
 		"@cloudflare/blindrsa-ts": "0.4.3",
-		"@cloudflare/vitest-pool-workers": "0.8.0",
+		"@cloudflare/vitest-pool-workers": "0.8.4",
 		"@cloudflare/workers-types": "4.20240605.0",
 		"@typescript-eslint/eslint-plugin": "6.21.0",
 		"@typescript-eslint/parser": "6.21.0",

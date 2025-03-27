@@ -26,7 +26,7 @@ export async function buildCmd(opts) {
 		sourcemap: true,
 		format: 'esm',
 		target: 'esnext',
-		external: ['__STATIC_CONTENT_MANIFEST'],
+		external: ['__STATIC_CONTENT_MANIFEST', 'cloudflare:workers'],
 		legalComments: 'external',
 		conditions: ['worker', 'browser'],
 		entryPoints: [path.join(__dirname, '..', 'src', 'index.ts')],

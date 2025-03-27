@@ -2,12 +2,21 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { WshimLogger } from '../src/context/logging';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { webcrypto } from 'node:crypto';
-import { RSABSSA } from '@cloudflare/blindrsa-ts';
+import { vi } from 'vitest';
 
 globalThis.RELEASE = 'test';
 
 vi.spyOn(WshimLogger.prototype, 'flushLogs').mockImplementation(async () => {
 	return Promise.resolve();
+});
+
+vi.mock('cloudflare:workers', () => {
+	return {
+		WorkerEntrypoint: class WorkerEntrypoint<T = any> {
+			constructor(
+				public ctx?: any,
+				public env?: any
+			) {}
+		},
+	};
 });
