@@ -309,11 +309,11 @@ export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 	return response;
 };
 
-export const handleRotateKey = async (ctx: Context, _request: Request) => {
+const rotateKey = async (ctx: Context): Promise<Uint8Array> => {
 	ctx.metrics.keyRotationTotal.inc();
 
 	// Generate a new type 2 Issuer key
-	let publicKeyEnc: string;
+	let rsaSsaPssPublicKey: Uint8Array;
 	let tokenKeyID: number;
 	let privateKey: ArrayBuffer;
 	do {
@@ -330,8 +330,7 @@ export const handleRotateKey = async (ctx: Context, _request: Request) => {
 		const publicKey = new Uint8Array(
 			(await crypto.subtle.exportKey('spki', keypair.publicKey)) as ArrayBuffer
 		);
-		const rsaSsaPssPublicKey = util.convertEncToRSASSAPSS(publicKey);
-		publicKeyEnc = b64ToB64URL(u8ToB64(rsaSsaPssPublicKey));
+		rsaSsaPssPublicKey = util.convertEncToRSASSAPSS(publicKey);
 		tokenKeyID = await keyToTokenKeyID(rsaSsaPssPublicKey);
 		privateKey = (await crypto.subtle.exportKey('pkcs8', keypair.privateKey)) as ArrayBuffer;
 		// The bellow condition ensure there is no collision between truncated_token_key_id provided by the issuer
@@ -343,7 +342,7 @@ export const handleRotateKey = async (ctx: Context, _request: Request) => {
 		notBefore: ((Date.now() + Number.parseInt(ctx.env.KEY_NOT_BEFORE_DELAY_IN_MS)) / 1000).toFixed(
 			0
 		), // the spec mandates to use seconds
-		publicKey: publicKeyEnc,
+		publicKey: b64ToB64URL(u8ToB64(rsaSsaPssPublicKey)),
 		tokenKeyID: tokenKeyID.toString(),
 	};
 
@@ -355,16 +354,20 @@ export const handleRotateKey = async (ctx: Context, _request: Request) => {
 
 	ctx.wshimLogger.log(`Key rotated successfully, new key ${tokenKeyID}`);
 
-	return new Response(`New key ${publicKeyEnc}`, { status: 201 });
+	return rsaSsaPssPublicKey;
 };
 
-export const handleClearKey = async (ctx: Context, _request: Request) => {
+export const handleRotateKey = async (ctx: Context, _request: Request) => {
+	return new Response(`New key ${b64ToB64URL(u8ToB64(await rotateKey(ctx)))}`, { status: 201 });
+};
+
+const clearKey = async (ctx: Context): Promise<string[]> => {
 	ctx.metrics.keyClearTotal.inc();
 
 	const keys = await ctx.bucket.ISSUANCE_KEYS.list({ shouldUseCache: false });
 
 	if (keys.objects.length === 0) {
-		return new Response('No keys to clear', { status: 201 });
+		return [];
 	}
 
 	const lifespanInMs = Number.parseInt(ctx.env.KEY_LIFESPAN_IN_MS);
@@ -408,7 +411,16 @@ export const handleClearKey = async (ctx: Context, _request: Request) => {
 	await ctx.bucket.ISSUANCE_KEYS.delete(toDeleteArray);
 	ctx.waitUntil(clearDirectoryCache(ctx));
 
-	return new Response(`Keys cleared: ${toDeleteArray.join('\n')}`, { status: 201 });
+	return toDeleteArray;
+};
+
+export const handleClearKey = async (ctx: Context, _request: Request) => {
+	const deletedKeys = await clearKey(ctx);
+	if (deletedKeys.length === 0) {
+		return new Response('No keys to clear', { status: 201 });
+	} else {
+		return new Response(`Keys cleared: ${deletedKeys.join('\n')}`, { status: 201 });
+	}
 };
 
 export class IssuerHandler extends WorkerEntrypoint<Bindings> {
@@ -449,17 +461,17 @@ export class IssuerHandler extends WorkerEntrypoint<Bindings> {
 	): Promise<{ serialized: Uint8Array; status?: number; responseContentType: string }> {
 		const ctx = this.context(url, prefix);
 		const domain = new URL(url).host;
-		return issue(ctx, tokenRequest, domain, contentType);
+		return await issue(ctx, tokenRequest, domain, contentType);
 	}
 
-	async rotateKey(url: string, prefix: string): Promise<Response> {
+	async rotateKey(url: string, prefix: string): Promise<Uint8Array> {
 		const ctx = this.context(url, prefix);
-		return handleRotateKey(ctx, new Request(url));
+		return await rotateKey(ctx);
 	}
 
-	async clearKey(url: string, prefix: string): Promise<Response> {
+	async clearKey(url: string, prefix: string): Promise<string[]> {
 		const ctx = this.context(url, prefix);
-		return await handleClearKey(ctx, new Request(url));
+		return await clearKey(ctx);
 	}
 }
 
