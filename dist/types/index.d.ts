@@ -203,8 +203,8 @@ export declare class IssuerHandler extends WorkerEntrypoint<Bindings> {
 		status?: number;
 		responseContentType: string;
 	}>;
-	rotateKey(url: string, prefix: string): Promise<Response>;
-	clearKey(url: string, prefix: string): Promise<Response>;
+	rotateKey(url: string, prefix: string): Promise<Uint8Array>;
+	clearKey(url: string, prefix: string): Promise<string[]>;
 }
 declare const _default: {
 	fetch(request: Request, env: Bindings, ctx: ExecutionContext): Promise<Response>;
