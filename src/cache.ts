@@ -10,12 +10,15 @@ export const getDirectoryCache = async (): Promise<Cache> => {
 	return caches.open('response/issuer-directory');
 };
 
-export const DIRECTORY_CACHE_REQUEST = (hostname: string) =>
-	new Request(`https://${hostname}${PRIVATE_TOKEN_ISSUER_DIRECTORY}`);
+export const DIRECTORY_CACHE_REQUEST = (hostname: string, prefix: string) => {
+	const normalizedPrefix = prefix !== '' ? `/${prefix}` : '';
+	const url = `https://${hostname}${normalizedPrefix}${PRIVATE_TOKEN_ISSUER_DIRECTORY}`;
+	return new Request(url);
+};
 
 export const clearDirectoryCache = async (ctx: Context): Promise<boolean> => {
 	const cache = await getDirectoryCache();
-	return cache.delete(DIRECTORY_CACHE_REQUEST(ctx.hostname));
+	return cache.delete(DIRECTORY_CACHE_REQUEST(ctx.hostname, ctx.prefix));
 };
 
 export type CacheElement<T> = { value: T; expiration: Date };
@@ -307,12 +310,11 @@ export interface CachedR2BucketOptions {
 
 export class CachedR2Bucket {
 	private bucket: R2Bucket;
-	private prefix: string;
 	constructor(
 		private ctx: Context,
 		bucket: R2Bucket,
 		private cache: ReadableCache,
-		prefix: string = '',
+		private prefix: string,
 		private ttl_in_ms = DEFAULT_R2_BUCKET_CACHE_TTL_IN_MS
 	) {
 		this.prefix = prefix;
@@ -338,7 +340,6 @@ export class CachedR2Bucket {
 	private shouldUseCache(options?: CachedR2BucketOptions): boolean {
 		return options?.shouldUseCache ?? true;
 	}
-
 	// WARNING: key should be lowered than 1024 bytes
 	// See https://developers.cloudflare.com/r2/reference/limits/
 

@@ -82,10 +82,10 @@ export interface CachedR2BucketOptions {
 declare class CachedR2Bucket {
 	private ctx;
 	private cache;
+	private prefix;
 	private ttl_in_ms;
 	private bucket;
-	private prefix;
-	constructor(ctx: Context, bucket: R2Bucket, cache: ReadableCache, prefix?: string, ttl_in_ms?: number);
+	constructor(ctx: Context, bucket: R2Bucket, cache: ReadableCache, prefix: string, ttl_in_ms?: number);
 	private shouldUseCache;
 	private addPrefix;
 	head(key: string, options?: CachedR2BucketOptions): Promise<CachedR2Object | null>;
@@ -156,7 +156,7 @@ declare class Context {
 	logger: Logger;
 	metrics: MetricsRegistry;
 	wshimLogger: WshimLogger;
-	prefix?: string | undefined;
+	prefix: string;
 	hostname: string;
 	startTime: number;
 	private promises;
@@ -164,7 +164,7 @@ declare class Context {
 		ISSUANCE_KEYS: CachedR2Bucket;
 	};
 	performance: Performance;
-	constructor(request: Request, env: Bindings, _waitUntil: WaitUntilFunc, logger: Logger, metrics: MetricsRegistry, wshimLogger: WshimLogger, prefix?: string | undefined);
+	constructor(request: Request, env: Bindings, _waitUntil: WaitUntilFunc, logger: Logger, metrics: MetricsRegistry, wshimLogger: WshimLogger, prefix?: string);
 	isTest(): boolean;
 	/**
 	 * Registers async tasks with the runtime, tracks them internally and adds error reporting for uncaught exceptions
@@ -208,6 +208,7 @@ export declare class IssuerHandler extends WorkerEntrypoint<Bindings> {
 }
 declare const _default: {
 	fetch(request: Request, env: Bindings, ctx: ExecutionContext): Promise<Response>;
+	scheduled(event: ScheduledEvent, env: Bindings, ctx: ExecutionContext): Promise<void>;
 };
 
 export {

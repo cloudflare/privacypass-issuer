@@ -36,6 +36,7 @@ import {
 } from './cache';
 const { BlindRSAMode, Issuer, TokenRequest } = publicVerif;
 const { BatchedTokenRequest, BatchedTokenResponse, Issuer: BatchedTokensIssuer } = arbitraryBatched;
+import { shouldRotateKey } from './utils/keyRotation';
 
 import { shouldClearKey } from './utils/keyRotation';
 import { WorkerEntrypoint } from 'cloudflare:workers';
@@ -243,7 +244,7 @@ export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 	const cache = await getDirectoryCache();
 	let cachedResponse: Response | undefined;
 	try {
-		cachedResponse = await cache.match(DIRECTORY_CACHE_REQUEST(ctx.hostname));
+		cachedResponse = await cache.match(DIRECTORY_CACHE_REQUEST(ctx.hostname, ctx.prefix));
 	} catch (e: unknown) {
 		const err = e as Error;
 		throw new InternalCacheError(err.message);
@@ -304,7 +305,7 @@ export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 		Number.parseInt(ctx.env.DIRECTORY_CACHE_MAX_AGE_SECONDS) * (0.7 + 0.3 * Math.random())
 	).toFixed(0);
 	toCacheResponse.headers.set('cache-control', `public, max-age=${cacheTime}`);
-	ctx.waitUntil(cache.put(DIRECTORY_CACHE_REQUEST(ctx.hostname), toCacheResponse));
+	ctx.waitUntil(cache.put(DIRECTORY_CACHE_REQUEST(ctx.hostname, ctx.prefix), toCacheResponse));
 
 	return response;
 };
@@ -479,5 +480,18 @@ export default {
 	async fetch(request: Request, env: Bindings, ctx: ExecutionContext) {
 		const issuerHandler = new IssuerHandler(ctx, env);
 		return issuerHandler.fetch(request);
+	},
+
+	async scheduled(event: ScheduledEvent, env: Bindings, ctx: ExecutionContext) {
+		const sampleRequest = new Request(`https://schedule.example.com`);
+
+		const context = Router.buildContext(sampleRequest, env, ctx, '');
+		const date = new Date(event.scheduledTime);
+
+		if (shouldRotateKey(date, env)) {
+			await handleRotateKey(context, sampleRequest);
+		} else {
+			await handleClearKey(context, sampleRequest);
+		}
 	},
 };
