@@ -57,7 +57,7 @@ export const issue = async (
 	buffer: ArrayBuffer,
 	domain: string,
 	contentType?: string
-): Promise<{ serialized: Uint8Array; status?: number; responseContentType: string }> => {
+): Promise<{ serialized: Uint8Array; status: number; responseContentType: string }> => {
 	if (!contentType) {
 		throw new HeaderNotDefinedError('"Content-Type" must be defined');
 	}
@@ -65,7 +65,7 @@ export const issue = async (
 	switch (contentType) {
 		case MediaType.PRIVATE_TOKEN_REQUEST: {
 			const serialized = await handleSingleTokenRequest(ctx, buffer, domain);
-			return { serialized, responseContentType: MediaType.PRIVATE_TOKEN_RESPONSE };
+			return { serialized, status: 200, responseContentType: MediaType.PRIVATE_TOKEN_RESPONSE };
 		}
 		case MediaType.ARBITRARY_BATCHED_TOKEN_REQUEST: {
 			const { serialized, status } = await handleBatchedTokenRequest(ctx, buffer, domain);
