@@ -53,28 +53,37 @@ interface StorageMetadata extends Record<string, string> {
 	tokenKeyID: string;
 }
 
+interface BlindRSAKeyPairWithMetadata {
+	sk: CryptoKey;
+	pk: CryptoKey;
+	notBefore: number;
+}
+
+/**
+ * The response returned by the `issue()` function.
+ *
+ * The `notBefore` field is temporarily included to allow the
+ * calculation of the expiration date.
+ */
+export interface IssueResponse {
+	serialized: Uint8Array;
+	status: number;
+	responseContentType: string;
+	notBefore?: number;
+}
+
 export const issue = async (
 	ctx: Context,
 	buffer: ArrayBuffer,
 	domain: string,
-	contentType?: string
-): Promise<{ serialized: Uint8Array; status: number; responseContentType: string }> => {
-	if (!contentType) {
-		throw new HeaderNotDefinedError('"Content-Type" must be defined');
-	}
-
+	contentType: string
+): Promise<IssueResponse> => {
 	switch (contentType) {
 		case MediaType.PRIVATE_TOKEN_REQUEST: {
-			const serialized = await handleSingleTokenRequest(ctx, buffer, domain);
-			return { serialized, status: 200, responseContentType: MediaType.PRIVATE_TOKEN_RESPONSE };
+			return await handleSingleTokenRequest(ctx, buffer, domain);
 		}
 		case MediaType.ARBITRARY_BATCHED_TOKEN_REQUEST: {
-			const { serialized, status } = await handleBatchedTokenRequest(ctx, buffer, domain);
-			return {
-				serialized,
-				status,
-				responseContentType: MediaType.ARBITRARY_BATCHED_TOKEN_RESPONSE,
-			};
+			return await handleBatchedTokenRequest(ctx, buffer, domain);
 		}
 		default:
 			throw new InvalidContentTypeError(`Invalid content type: ${contentType}`);
@@ -105,14 +114,12 @@ export const handleSingleTokenRequest = async (
 	ctx: Context,
 	buffer: ArrayBuffer,
 	domain: string
-): Promise<Uint8Array> => {
-	// Deserialize the token request from the raw bytes.
+): Promise<IssueResponse> => {
+	// Deserialize and process the token request.
 	const tokenRequest = TokenRequest.deserialize(TOKEN_TYPES.BLIND_RSA, new Uint8Array(buffer));
-
 	if (tokenRequest.tokenType !== TOKEN_TYPES.BLIND_RSA.value) {
 		throw new InvalidTokenTypeError();
 	}
-
 	const keyID = tokenRequest.truncatedTokenKeyId;
 	const { sk, pk } = await getBlindRSAKeyPair(ctx, keyID);
 	const issuer = new Issuer(BlindRSAMode.PSS, domain, sk, pk, { supportsRSARAW: true });
@@ -121,20 +128,28 @@ export const handleSingleTokenRequest = async (
 	ctx.metrics.issuanceRequestTotal.inc({ version: ctx.env.VERSION_METADATA.id ?? RELEASE });
 	ctx.metrics.signedTokenTotal.inc({ key_id: keyID });
 
-	return signedToken.serialize();
+	return {
+		serialized: signedToken.serialize(),
+		status: 200,
+		responseContentType: MediaType.PRIVATE_TOKEN_RESPONSE,
+	};
 };
 
 export const handleBatchedTokenRequest = async (
 	ctx: Context,
 	buffer: ArrayBuffer,
 	domain: string
-): Promise<{ serialized: Uint8Array; status: number }> => {
+): Promise<IssueResponse> => {
 	// Deserialize the batched token request.
 	const batchedTokenRequest = BatchedTokenRequest.deserialize(new Uint8Array(buffer));
-
 	if (batchedTokenRequest.tokenRequests.length === 0) {
 		const responseBytes = new BatchedTokenResponse([]).serialize();
-		return { serialized: responseBytes, status: 200 };
+		return {
+			serialized: responseBytes,
+			status: 200,
+			responseContentType: MediaType.ARBITRARY_BATCHED_TOKEN_RESPONSE,
+			// notBefore may not be relevant if there are no tokens but could be set to a default value if needed.
+		};
 	}
 
 	const keyID = batchedTokenRequest.tokenRequests[0].truncatedTokenKeyId;
@@ -149,7 +164,7 @@ export const handleBatchedTokenRequest = async (
 		}
 	}
 
-	const { sk, pk } = await getBlindRSAKeyPair(ctx, keyID);
+	const { sk, pk, notBefore } = await getBlindRSAKeyPair(ctx, keyID);
 	const issuer = new Issuer(BlindRSAMode.PSS, domain, sk, pk, { supportsRSARAW: true });
 	const batchedTokenIssuer = new BatchedTokensIssuer(issuer);
 	const batchedTokenResponse = await batchedTokenIssuer.issue(batchedTokenRequest);
@@ -159,19 +174,28 @@ export const handleBatchedTokenRequest = async (
 	const partial = batchedTokenResponse.tokenResponses.some(resp => resp.tokenResponse === null);
 	const status = partial ? 206 : 200;
 
-	return { serialized: responseBytes, status };
+	return {
+		serialized: responseBytes,
+		status,
+		responseContentType: MediaType.ARBITRARY_BATCHED_TOKEN_RESPONSE,
+		notBefore,
+	};
 };
 
 const getBlindRSAKeyPair = async (
 	ctx: Context,
 	keyID: number
-): Promise<{ sk: CryptoKey; pk: CryptoKey }> => {
+): Promise<BlindRSAKeyPairWithMetadata> => {
 	const key = await ctx.bucket.ISSUANCE_KEYS.get(keyID.toString());
 
 	if (key === null) {
 		ctx.metrics.issuanceKeyErrorTotal.inc({ key_id: keyID, type: KeyError.NOT_FOUND });
 		throw new BadTokenKeyRequestedError();
 	}
+
+	// Temporarily return notBefore, this allows to calculate the expiration date
+	const metadata = (key.customMetadata as StorageMetadata) || undefined;
+	const notBefore = parseInt(metadata?.notBefore ?? Math.floor(Date.now() / 1000).toString(), 10);
 
 	const CRYPTO_KEY_EXPIRATION_IN_MS = 300_000; // 5min
 	const cryptoKeyCache = new InMemoryCryptoKeyCache(ctx);
@@ -228,7 +252,7 @@ const getBlindRSAKeyPair = async (
 		}
 	});
 
-	return { sk, pk };
+	return { sk, pk, notBefore };
 };
 
 export const handleHeadTokenDirectory = async (ctx: Context, request: Request) => {
@@ -456,10 +480,10 @@ export class IssuerHandler extends WorkerEntrypoint<Bindings> {
 
 	async issue(
 		url: string,
-		tokenRequest: ArrayBufferLike,
-		contentType: string | undefined,
+		tokenRequest: ArrayBuffer,
+		contentType: string,
 		prefix: string
-	): Promise<{ serialized: Uint8Array; status?: number; responseContentType: string }> {
+	): Promise<IssueResponse> {
 		const ctx = this.context(url, prefix);
 		const domain = new URL(url).host;
 		return await issue(ctx, tokenRequest, domain, contentType);
