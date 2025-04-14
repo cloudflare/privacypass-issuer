@@ -181,7 +181,7 @@ declare class Context {
 }
 export declare const issue: (ctx: Context, buffer: ArrayBuffer, domain: string, contentType?: string) => Promise<{
 	serialized: Uint8Array;
-	status?: number;
+	status: number;
 	responseContentType: string;
 }>;
 export declare const handleTokenRequest: (ctx: Context, request: Request) => Promise<Response>;

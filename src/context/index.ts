@@ -25,10 +25,11 @@ export class Context {
 		public wshimLogger: WshimLogger,
 		public prefix: string = ''
 	) {
+		const normPrefix = prefix.endsWith('/') ? prefix : prefix + '/';
 		// eslint-disable-next-line @typescript-eslint/no-this-alias
 		const ctx = this;
 		const cache = new CascadingCache(new InMemoryCache(ctx), new APICache(ctx, 'r2/issuance_keys'));
-		const cachedR2Bucket = new CachedR2Bucket(ctx, env.ISSUANCE_KEYS, cache, prefix);
+		const cachedR2Bucket = new CachedR2Bucket(ctx, env.ISSUANCE_KEYS, cache, normPrefix);
 
 		const cachedR2BucketWithRetries = new Proxy(cachedR2Bucket, {
 			get: (target, prop, receiver) => {
@@ -44,7 +45,7 @@ export class Context {
 		});
 
 		this.hostname = new URL(request.url).hostname;
-		this.prefix = prefix;
+		this.prefix = normPrefix;
 		this.bucket = {
 			ISSUANCE_KEYS: cachedR2BucketWithRetries,
 		};
