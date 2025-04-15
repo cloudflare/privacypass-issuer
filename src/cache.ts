@@ -16,9 +16,8 @@ export const getDirectoryCache = async (): Promise<Cache> => {
 };
 
 export const DIRECTORY_CACHE_REQUEST = (hostname: string, prefix: string) => {
-	const normalizedPrefix = normalizePrefix(prefix);
-	const url = `https://${hostname}${normalizedPrefix}${PRIVATE_TOKEN_ISSUER_DIRECTORY}`;
-	return new Request(url);
+	const base = prefix || hostname;
+	return new Request(`https://${base}${PRIVATE_TOKEN_ISSUER_DIRECTORY}`);
 };
 
 export const clearDirectoryCache = async (ctx: Context): Promise<boolean> => {
@@ -350,7 +349,7 @@ export class CachedR2Bucket {
 
 	// Helper to add the prefix stored in the bucket instance.
 	private addPrefix(key: string): string {
-		return this.prefix ? `${this.prefix}/${key}` : key;
+		return this.prefix ? `${this.prefix}${key}` : key;
 	}
 
 	head(key: string, options?: CachedR2BucketOptions): Promise<CachedR2Object | null> {
