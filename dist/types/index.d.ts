@@ -179,17 +179,22 @@ declare class Context {
 	 */
 	waitForPromises(): Promise<void>;
 }
-export declare const issue: (ctx: Context, buffer: ArrayBuffer, domain: string, contentType?: string) => Promise<{
+/**
+ * The response returned by the `issue()` function.
+ *
+ * The `notBefore` field is temporarily included to allow the
+ * calculation of the expiration date.
+ */
+export interface IssueResponse {
 	serialized: Uint8Array;
 	status: number;
 	responseContentType: string;
-}>;
+	notBefore?: number;
+}
+export declare const issue: (ctx: Context, buffer: ArrayBuffer, domain: string, contentType: string) => Promise<IssueResponse>;
 export declare const handleTokenRequest: (ctx: Context, request: Request) => Promise<Response>;
-export declare const handleSingleTokenRequest: (ctx: Context, buffer: ArrayBuffer, domain: string) => Promise<Uint8Array>;
-export declare const handleBatchedTokenRequest: (ctx: Context, buffer: ArrayBuffer, domain: string) => Promise<{
-	serialized: Uint8Array;
-	status: number;
-}>;
+export declare const handleSingleTokenRequest: (ctx: Context, buffer: ArrayBuffer, domain: string) => Promise<IssueResponse>;
+export declare const handleBatchedTokenRequest: (ctx: Context, buffer: ArrayBuffer, domain: string) => Promise<IssueResponse>;
 export declare const handleHeadTokenDirectory: (ctx: Context, request: Request) => Promise<Response>;
 export declare const handleTokenDirectory: (ctx: Context, request: Request) => Promise<Response>;
 export declare const handleRotateKey: (ctx: Context, _request: Request) => Promise<Response>;
@@ -198,11 +203,7 @@ export declare class IssuerHandler extends WorkerEntrypoint<Bindings> {
 	private context;
 	fetch(request: Request): Promise<Response>;
 	tokenDirectory(url: string, prefix: string): Promise<Response>;
-	issue(url: string, tokenRequest: ArrayBufferLike, contentType: string | undefined, prefix: string): Promise<{
-		serialized: Uint8Array;
-		status?: number;
-		responseContentType: string;
-	}>;
+	issue(url: string, tokenRequest: ArrayBuffer, contentType: string, prefix: string): Promise<IssueResponse>;
 	rotateKey(url: string, prefix: string): Promise<Uint8Array>;
 	clearKey(url: string, prefix: string): Promise<string[]>;
 }
