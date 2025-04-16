@@ -2,13 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Bindings } from '../bindings';
-import { APICache, CachedR2Bucket, InMemoryCache, CascadingCache, normalizePrefix } from '../cache';
+import { APICache, CachedR2Bucket, InMemoryCache, CascadingCache } from '../cache';
 import { asyncRetries, DEFAULT_RETRIES } from '../utils/promises';
 import { Logger, WshimLogger } from './logging';
 import { MetricsRegistry } from './metrics';
 
 export type WaitUntilFunc = (p: Promise<unknown>) => void;
-
 export class Context {
 	public hostname: string;
 	public startTime: number;
@@ -87,4 +86,9 @@ export class Context {
 			}
 		}
 	}
+}
+
+function normalizePrefix(prefix: string): string {
+	if (!prefix) return '';
+	return prefix.endsWith('/') ? prefix : `${prefix}/`;
 }
