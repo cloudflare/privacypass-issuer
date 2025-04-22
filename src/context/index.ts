@@ -6,6 +6,7 @@ import { APICache, CachedR2Bucket, InMemoryCache, CascadingCache } from '../cach
 import { asyncRetries, DEFAULT_RETRIES } from '../utils/promises';
 import { Logger, WshimLogger } from './logging';
 import { MetricsRegistry } from './metrics';
+import { ServiceInfo } from '../types';
 
 export type WaitUntilFunc = (p: Promise<unknown>) => void;
 export class Context {
@@ -14,6 +15,7 @@ export class Context {
 	private promises: Promise<unknown>[] = [];
 	public bucket: { ISSUANCE_KEYS: CachedR2Bucket };
 	public performance: Performance;
+	public serviceInfo?: ServiceInfo;
 
 	constructor(
 		request: Request,
@@ -51,6 +53,17 @@ export class Context {
 
 		this.performance = env.PERFORMANCE ?? self.performance;
 		this.startTime = this.performance.now();
+	}
+	/**
+	 *
+	 * Flush out any pending metrics/logs that were scheduled via waitUntil.
+	 */
+	public async postProcessing(): Promise<void> {
+		await Promise.all([
+			this.waitForPromises(),
+			this.metrics.publish(),
+			this.wshimLogger.flushLogs(),
+		]);
 	}
 
 	isTest(): boolean {

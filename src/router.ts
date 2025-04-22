@@ -138,11 +138,6 @@ export class Router {
 		);
 	}
 
-	private async postProcessing(ctx: Context) {
-		// wait for async tasks to complete before reporting metrics
-		await Promise.all([ctx.waitForPromises(), ctx.metrics.publish(), ctx.wshimLogger.flushLogs()]);
-	}
-
 	// match exact path, and returns a response using the appropriate path handler
 	async handle(
 		request: Request<Bindings, IncomingRequestCfProperties<unknown>>,
@@ -172,7 +167,7 @@ export class Router {
 			response = await handleError(ctx, e as Error, { path, status });
 		}
 		ctx.metrics.requestsDurationMs.observe(ctx.performance.now() - ctx.startTime, { path });
-		ectx.waitUntil(this.postProcessing(ctx));
+		ectx.waitUntil(ctx.postProcessing());
 		return response;
 	}
 }

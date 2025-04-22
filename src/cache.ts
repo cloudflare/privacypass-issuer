@@ -6,11 +6,6 @@ import { Context } from './context';
 import { b64Tou8, u8ToB64 } from './utils/base64';
 import { PRIVATE_TOKEN_ISSUER_DIRECTORY } from '@cloudflare/privacypass-ts';
 
-export function normalizePrefix(prefix: string): string {
-	if (!prefix) return '';
-	return prefix.endsWith('/') ? prefix : `${prefix}/`;
-}
-
 export const getDirectoryCache = async (): Promise<Cache> => {
 	return caches.open('response/issuer-directory');
 };

@@ -190,11 +190,11 @@ export class MetricsRegistry {
 	 * This function is a no-op in test and wrangler environements
 	 */
 	async publish(): Promise<void> {
-		await this.options.fetcher(this.options.endpoint, {
+		const { fetcher, endpoint, bearerToken } = this.options;
+
+		await fetcher(endpoint, {
 			method: 'POST',
-			headers: {
-				Authorization: `Bearer ${this.options.bearerToken}`,
-			},
+			headers: { Authorization: `Bearer ${bearerToken}` },
 			body: this.registry.metrics(),
 		});
 	}
