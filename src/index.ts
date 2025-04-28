@@ -15,6 +15,8 @@ import {
 	InvalidBatchedTokenTypeError,
 	InvalidContentTypeError,
 	MismatchedTokenKeyIDError,
+	handleError,
+	HTTPError,
 } from './errors';
 import { IssuerConfigurationResponse, TokenType } from './types';
 import { b64ToB64URL, b64Tou8, b64URLtoB64, u8ToB64 } from './utils/base64';
@@ -40,6 +42,8 @@ import { shouldRotateKey } from './utils/keyRotation';
 
 import { shouldClearKey } from './utils/keyRotation';
 import { WorkerEntrypoint } from 'cloudflare:workers';
+
+import { BaseRpcOptions, IssueOptions } from './types';
 
 const keyToTokenKeyID = async (key: Uint8Array): Promise<number> => {
 	const hash = await crypto.subtle.digest('SHA-256', key);
@@ -453,8 +457,8 @@ export class IssuerHandler extends WorkerEntrypoint<Bindings> {
 		const env = this.env;
 		const ectx = this.ctx;
 
-		const sampleRequest = new Request(url);
-		return Router.buildContext(sampleRequest, env, ectx, prefix);
+		const sample = new Request(url);
+		return Router.buildContext(sample, env, ectx, prefix);
 	}
 
 	async fetch(request: Request): Promise<Response> {
@@ -473,30 +477,49 @@ export class IssuerHandler extends WorkerEntrypoint<Bindings> {
 		);
 	}
 
-	async tokenDirectory(url: string, prefix: string): Promise<Response> {
-		const ctx = this.context(url, prefix);
-		return await handleTokenDirectory(ctx, new Request(url));
+	async tokenDirectory(opts: BaseRpcOptions): Promise<Response> {
+		return this.withMetrics(opts, ctx =>
+			handleTokenDirectory(ctx, new Request(opts.serviceInfo.url))
+		);
 	}
 
-	async issue(
-		url: string,
-		tokenRequest: ArrayBuffer,
-		contentType: string,
-		prefix: string
-	): Promise<IssueResponse> {
-		const ctx = this.context(url, prefix);
-		const domain = new URL(url).host;
-		return await issue(ctx, tokenRequest, domain, contentType);
+	async issue(opts: IssueOptions): Promise<IssueResponse> {
+		return this.withMetrics(opts, ctx =>
+			issue(ctx, opts.tokenRequest, new URL(opts.serviceInfo.url).host, opts.contentType)
+		);
 	}
 
-	async rotateKey(url: string, prefix: string): Promise<Uint8Array> {
-		const ctx = this.context(url, prefix);
-		return await rotateKey(ctx);
+	async rotateKey(opts: BaseRpcOptions): Promise<Uint8Array> {
+		return this.withMetrics(opts, ctx => rotateKey(ctx));
 	}
 
-	async clearKey(url: string, prefix: string): Promise<string[]> {
-		const ctx = this.context(url, prefix);
-		return await clearKey(ctx);
+	async clearKey(opts: BaseRpcOptions): Promise<string[]> {
+		return this.withMetrics(opts, ctx => clearKey(ctx));
+	}
+
+	private async withMetrics<T>(opts: BaseRpcOptions, fn: (ctx: Context) => Promise<T>): Promise<T> {
+		const { prefix, serviceInfo, op } = opts;
+		const hostname = new URL(serviceInfo.url).hostname;
+		const ctx = this.context(serviceInfo.url, prefix);
+		const route = serviceInfo?.route ?? `/${op}`;
+		ctx.serviceInfo = serviceInfo;
+
+		const start = ctx.performance.now();
+		try {
+			return await fn(ctx);
+		} catch (e: unknown) {
+			const err = e as Error;
+			const status = e instanceof HTTPError ? e.status : 500;
+			await handleError(ctx, err, { path: route, hostname, status });
+			throw e;
+		} finally {
+			const labels = { path: route, hostname };
+			const duration = ctx.performance.now() - start;
+
+			ctx.metrics.requestsTotal.inc(labels);
+			ctx.metrics.requestsDurationMs.observe(duration, labels);
+			ctx.waitUntil(ctx.postProcessing());
+		}
 	}
 }
 

@@ -149,6 +149,20 @@ declare class MetricsRegistry {
 	 */
 	publish(): Promise<void>;
 }
+export interface ServiceInfo {
+	url: string;
+	route: string;
+	service: string;
+}
+export interface BaseRpcOptions {
+	prefix: string;
+	serviceInfo: ServiceInfo;
+	op: "tokenDirectory" | "issue" | "rotateKey" | "clearKey";
+}
+export interface IssueOptions extends BaseRpcOptions {
+	tokenRequest: ArrayBuffer;
+	contentType: string;
+}
 export type WaitUntilFunc = (p: Promise<unknown>) => void;
 declare class Context {
 	env: Bindings;
@@ -164,7 +178,13 @@ declare class Context {
 		ISSUANCE_KEYS: CachedR2Bucket;
 	};
 	performance: Performance;
+	serviceInfo?: ServiceInfo;
 	constructor(request: Request, env: Bindings, _waitUntil: WaitUntilFunc, logger: Logger, metrics: MetricsRegistry, wshimLogger: WshimLogger, prefix?: string);
+	/**
+	 *
+	 * Flush out any pending metrics/logs that were scheduled via waitUntil.
+	 */
+	postProcessing(): Promise<void>;
 	isTest(): boolean;
 	/**
 	 * Registers async tasks with the runtime, tracks them internally and adds error reporting for uncaught exceptions
@@ -202,10 +222,11 @@ export declare const handleClearKey: (ctx: Context, _request: Request) => Promis
 export declare class IssuerHandler extends WorkerEntrypoint<Bindings> {
 	private context;
 	fetch(request: Request): Promise<Response>;
-	tokenDirectory(url: string, prefix: string): Promise<Response>;
-	issue(url: string, tokenRequest: ArrayBuffer, contentType: string, prefix: string): Promise<IssueResponse>;
-	rotateKey(url: string, prefix: string): Promise<Uint8Array>;
-	clearKey(url: string, prefix: string): Promise<string[]>;
+	tokenDirectory(opts: BaseRpcOptions): Promise<Response>;
+	issue(opts: IssueOptions): Promise<IssueResponse>;
+	rotateKey(opts: BaseRpcOptions): Promise<Uint8Array>;
+	clearKey(opts: BaseRpcOptions): Promise<string[]>;
+	private withMetrics;
 }
 declare const _default: {
 	fetch(request: Request, env: Bindings, ctx: ExecutionContext): Promise<Response>;

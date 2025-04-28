@@ -23,3 +23,20 @@ export enum TokenType {
 	RateLimitBlindRSAECDSA = 0x0003,
 	RateLimitBlindRSAEd25519 = 0x0004,
 }
+
+export interface ServiceInfo {
+	url: string;
+	route: string;
+	service: string;
+}
+
+export interface BaseRpcOptions {
+	prefix: string;
+	serviceInfo: ServiceInfo;
+	op: 'tokenDirectory' | 'issue' | 'rotateKey' | 'clearKey';
+}
+
+export interface IssueOptions extends BaseRpcOptions {
+	tokenRequest: ArrayBuffer;
+	contentType: string;
+}
