@@ -433,12 +433,11 @@ const clearKey = async (ctx: Context): Promise<string[]> => {
 
 	if (toDeleteArray.length > 0) {
 		ctx.wshimLogger.log(`\nKeys cleared: ${toDeleteArray.join('\n')}`);
+		await ctx.bucket.ISSUANCE_KEYS.delete(toDeleteArray);
+		ctx.waitUntil(clearDirectoryCache(ctx));
 	} else {
 		ctx.wshimLogger.log('\nNo keys were cleared.');
 	}
-
-	await ctx.bucket.ISSUANCE_KEYS.delete(toDeleteArray);
-	ctx.waitUntil(clearDirectoryCache(ctx));
 
 	return toDeleteArray;
 };

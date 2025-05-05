@@ -424,15 +424,30 @@ export class CachedR2Bucket {
 		return this.bucket.put(...args);
 	}
 
-	delete(
+	/**
+	 * Idempotent delete:
+	 *  - Uses `addPrefix(...)` to prepend `this.prefix` exactly once.
+	 *  - If you pass "foo" → deletes "prefixfoo".   // assuming your prefix includes the trailing slash
+	 *  - If you pass "prefixfoo" → still deletes "prefixfoo" (no double‑prefix).
+	 *  - Safe to call repeatedly without changing the key or deleting the wrong objects.
+	 */
+	async delete(
 		...args: Parameters<typeof R2Bucket.prototype.delete>
 	): ReturnType<typeof R2Bucket.prototype.delete> {
-		// Only apply prefix if the first argument is a valid key string
-		if (args.length > 0) {
-			if (Array.isArray(args[0])) {
-				args[0] = args[0].map((key: string) => this.addPrefix(key));
-			} else if (typeof args[0] === 'string') {
-				args[0] = this.addPrefix(args[0]);
+		const base = this.prefix ?? '';
+
+		if (base) {
+			const normPrefix = base.endsWith('/') ? base : base + '/';
+
+			if (args.length > 0) {
+				if (Array.isArray(args[0])) {
+					args[0] = (args[0] as string[]).map(key =>
+						key.startsWith(normPrefix) ? key : this.addPrefix(key)
+					);
+				} else if (typeof args[0] === 'string') {
+					const k = args[0] as string;
+					args[0] = k.startsWith(normPrefix) ? k : this.addPrefix(k);
+				}
 			}
 		}
 		return this.bucket.delete(...args);

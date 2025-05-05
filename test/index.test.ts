@@ -535,7 +535,12 @@ describe('Integration Test for Key Clearing with Mocked Date', () => {
 			vi.setSystemTime(new Date(clearTime));
 			await handleClearKey(ctx, undefined);
 
-			expect(deleteSpy).toHaveBeenCalledWith(expect.arrayContaining(expectedDeletedKeys));
+			// Assert: if no expectedDeletedKeys, delete should not be called
+			if (expectedDeletedKeys.length === 0) {
+				expect(deleteSpy).not.toHaveBeenCalled();
+			} else {
+				expect(deleteSpy).toHaveBeenCalledWith(expect.arrayContaining(expectedDeletedKeys));
+			}
 		}
 	);
 });

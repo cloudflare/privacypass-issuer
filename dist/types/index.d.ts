@@ -92,6 +92,13 @@ declare class CachedR2Bucket {
 	list(options?: R2ListOptions$1 & CachedR2BucketOptions): Promise<CachedR2Objects>;
 	get(key: string, options?: R2GetOptions & CachedR2BucketOptions): Promise<CachedR2Object | null>;
 	put(...args: Parameters<typeof R2Bucket.prototype.put>): ReturnType<typeof R2Bucket.prototype.put>;
+	/**
+	 * Idempotent delete:
+	 *  - Uses `addPrefix(...)` to prepend `this.prefix` exactly once.
+	 *  - If you pass "foo" → deletes "prefixfoo".   // assuming your prefix includes the trailing slash
+	 *  - If you pass "prefixfoo" → still deletes "prefixfoo" (no double‑prefix).
+	 *  - Safe to call repeatedly without changing the key or deleting the wrong objects.
+	 */
 	delete(...args: Parameters<typeof R2Bucket.prototype.delete>): ReturnType<typeof R2Bucket.prototype.delete>;
 }
 export interface Logger {
