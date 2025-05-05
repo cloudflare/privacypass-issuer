@@ -462,12 +462,12 @@ describe('Integration Test for Key Clearing with Mocked Date', () => {
 
 	it.each`
 		name                                                                  | keyUpload1                | keyUpload2                | keyUpload3                | clearTime                 | keyLifespanInMs            | minimumNumberOfKeys | expectedDeletedKeys
-		${'should clear expired key and preserve freshest keys'}              | ${'2024-10-01T14:59:59Z'} | ${'2024-09-30T11:00:00Z'} | ${'2024-10-03T13:00:00Z'} | ${'2024-10-03T14:00:00Z'} | ${2 * 24 * 60 * 60 * 1000} | ${1}                | ${['key2']}
+		${'should clear expired key and preserve freshest keys'}              | ${'2024-10-01T14:59:59Z'} | ${'2024-09-30T11:00:00Z'} | ${'2024-10-03T13:00:00Z'} | ${'2024-10-03T14:00:00Z'} | ${2 * 24 * 60 * 60 * 1000} | ${1}                | ${['_global/key2']}
 		${'should preserve all keys when within lifespan'}                    | ${'2024-10-01T14:00:00Z'} | ${'2024-10-02T10:00:00Z'} | ${'2024-10-03T12:00:00Z'} | ${'2024-10-03T14:00:00Z'} | ${2 * 24 * 60 * 60 * 1000} | ${1}                | ${[]}
-		${'should clear only the oldest key that exceeded lifespan'}          | ${'2024-09-28T11:00:00Z'} | ${'2024-10-01T15:00:00Z'} | ${'2024-10-03T13:00:00Z'} | ${'2024-10-03T14:00:00Z'} | ${2 * 24 * 60 * 60 * 1000} | ${1}                | ${['key1']}
-		${'should leave only the freshest key remaining'}                     | ${'2024-09-28T10:00:00Z'} | ${'2024-09-29T10:00:00Z'} | ${'2024-10-02T14:00:00Z'} | ${'2024-10-03T14:00:00Z'} | ${2 * 24 * 60 * 60 * 1000} | ${1}                | ${['key1', 'key2']}
+		${'should clear only the oldest key that exceeded lifespan'}          | ${'2024-09-28T11:00:00Z'} | ${'2024-10-01T15:00:00Z'} | ${'2024-10-03T13:00:00Z'} | ${'2024-10-03T14:00:00Z'} | ${2 * 24 * 60 * 60 * 1000} | ${1}                | ${['_global/key1']}
+		${'should leave only the freshest key remaining'}                     | ${'2024-09-28T10:00:00Z'} | ${'2024-09-29T10:00:00Z'} | ${'2024-10-02T14:00:00Z'} | ${'2024-10-03T14:00:00Z'} | ${2 * 24 * 60 * 60 * 1000} | ${1}                | ${['_global/key1', '_global/key2']}
 		${'should keep all keys when minimum freshest is three'}              | ${'2024-09-28T10:00:00Z'} | ${'2024-09-29T10:00:00Z'} | ${'2024-10-02T14:00:00Z'} | ${'2024-10-03T14:00:00Z'} | ${2 * 24 * 60 * 60 * 1000} | ${3}                | ${[]}
-		${'should leave only the freshest key remaining with 1 day rotation'} | ${'2024-10-01T14:00:00Z'} | ${'2024-10-02T10:00:00Z'} | ${'2024-10-03T12:00:00Z'} | ${'2024-10-03T14:00:00Z'} | ${1 * 24 * 60 * 60 * 1000} | ${1}                | ${['key1', 'key2']}
+		${'should leave only the freshest key remaining with 1 day rotation'} | ${'2024-10-01T14:00:00Z'} | ${'2024-10-02T10:00:00Z'} | ${'2024-10-03T12:00:00Z'} | ${'2024-10-03T14:00:00Z'} | ${1 * 24 * 60 * 60 * 1000} | ${1}                | ${['_global/key1', '_global/key2']}
 	`(
 		'$name',
 		async ({
@@ -535,10 +535,11 @@ describe('Integration Test for Key Clearing with Mocked Date', () => {
 			vi.setSystemTime(new Date(clearTime));
 			await handleClearKey(ctx, new Request('http://host'));
 
-			if (expectedDeletedKeys.length !== 0) {
-				expect(deleteSpy).toHaveBeenCalledWith(
-					expect.arrayContaining(expectedDeletedKeys.map(k => `_global/${k}`))
-				);
+			// Assert: if no expectedDeletedKeys, delete should not be called
+			if (expectedDeletedKeys.length === 0) {
+				expect(deleteSpy).not.toHaveBeenCalled();
+			} else {
+				expect(deleteSpy).toHaveBeenCalledWith(expect.arrayContaining(expectedDeletedKeys));
 			}
 		}
 	);
