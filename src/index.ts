@@ -437,7 +437,9 @@ const clearKey = async (ctx: Context): Promise<string[]> => {
 		ctx.wshimLogger.log('\nNo keys were cleared.');
 	}
 
-	await ctx.bucket.ISSUANCE_KEYS.delete(toDeleteArray);
+	while (toDeleteArray.length > 0) {
+		await ctx.bucket.ISSUANCE_KEYS.delete(toDeleteArray.splice(0, 1000));
+	}
 	ctx.waitUntil(clearDirectoryCache(ctx));
 
 	return toDeleteArray;
@@ -453,7 +455,7 @@ export const handleClearKey = async (ctx: Context, _request: Request) => {
 };
 
 export class IssuerHandler extends WorkerEntrypoint<Bindings> {
-	private context(url: string, prefix: string): Context {
+	private context(url: string, prefix?: string): Context {
 		const env = this.env;
 		const ectx = this.ctx;
 
@@ -532,7 +534,7 @@ export default {
 	async scheduled(event: ScheduledEvent, env: Bindings, ctx: ExecutionContext) {
 		const sampleRequest = new Request(`https://schedule.example.com`);
 
-		const context = Router.buildContext(sampleRequest, env, ctx, '');
+		const context = Router.buildContext(sampleRequest, env, ctx);
 		const date = new Date(event.scheduledTime);
 
 		if (shouldRotateKey(date, env)) {

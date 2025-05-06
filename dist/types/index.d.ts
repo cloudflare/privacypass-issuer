@@ -80,12 +80,11 @@ export interface CachedR2BucketOptions {
 	shouldUseCache?: boolean;
 }
 declare class CachedR2Bucket {
-	private ctx;
 	private cache;
-	private prefix;
 	private ttl_in_ms;
-	private bucket;
-	constructor(ctx: Context, bucket: R2Bucket, cache: ReadableCache, prefix: string, ttl_in_ms?: number);
+	private readonly bucket;
+	private readonly prefix;
+	constructor(ctx: Context, bucket: R2Bucket, cache: ReadableCache, prefix?: string, ttl_in_ms?: number);
 	private shouldUseCache;
 	private addPrefix;
 	head(key: string, options?: CachedR2BucketOptions): Promise<CachedR2Object | null>;
@@ -155,7 +154,7 @@ export interface ServiceInfo {
 	service: string;
 }
 export interface BaseRpcOptions {
-	prefix: string;
+	prefix?: string;
 	serviceInfo: ServiceInfo;
 	op: "tokenDirectory" | "issue" | "rotateKey" | "clearKey";
 }
@@ -165,12 +164,12 @@ export interface IssueOptions extends BaseRpcOptions {
 }
 export type WaitUntilFunc = (p: Promise<unknown>) => void;
 declare class Context {
-	env: Bindings;
-	private _waitUntil;
-	logger: Logger;
-	metrics: MetricsRegistry;
-	wshimLogger: WshimLogger;
-	prefix: string;
+	readonly env: Bindings;
+	private readonly _waitUntil;
+	readonly logger: Logger;
+	readonly metrics: MetricsRegistry;
+	readonly wshimLogger: WshimLogger;
+	readonly prefix?: string | undefined;
 	hostname: string;
 	startTime: number;
 	private promises;
@@ -179,7 +178,7 @@ declare class Context {
 	};
 	performance: Performance;
 	serviceInfo?: ServiceInfo;
-	constructor(request: Request, env: Bindings, _waitUntil: WaitUntilFunc, logger: Logger, metrics: MetricsRegistry, wshimLogger: WshimLogger, prefix?: string);
+	constructor(request: Request, env: Bindings, _waitUntil: WaitUntilFunc, logger: Logger, metrics: MetricsRegistry, wshimLogger: WshimLogger, prefix?: string | undefined);
 	/**
 	 *
 	 * Flush out any pending metrics/logs that were scheduled via waitUntil.

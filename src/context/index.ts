@@ -19,18 +19,17 @@ export class Context {
 
 	constructor(
 		request: Request,
-		public env: Bindings,
-		private _waitUntil: WaitUntilFunc,
-		public logger: Logger,
-		public metrics: MetricsRegistry,
-		public wshimLogger: WshimLogger,
-		public prefix: string = ''
+		public readonly env: Bindings,
+		private readonly _waitUntil: WaitUntilFunc,
+		public readonly logger: Logger,
+		public readonly metrics: MetricsRegistry,
+		public readonly wshimLogger: WshimLogger,
+		public readonly prefix?: string
 	) {
 		// eslint-disable-next-line @typescript-eslint/no-this-alias
 		const ctx = this;
 		const cache = new CascadingCache(new InMemoryCache(ctx), new APICache(ctx, 'r2/issuance_keys'));
-		const normalizedPrefix = normalizePrefix(prefix);
-		const cachedR2Bucket = new CachedR2Bucket(ctx, env.ISSUANCE_KEYS, cache, normalizedPrefix);
+		const cachedR2Bucket = new CachedR2Bucket(ctx, env.ISSUANCE_KEYS, cache, prefix);
 
 		const cachedR2BucketWithRetries = new Proxy(cachedR2Bucket, {
 			get: (target, prop, receiver) => {
@@ -46,7 +45,6 @@ export class Context {
 		});
 
 		this.hostname = new URL(request.url).hostname;
-		this.prefix = prefix;
 		this.bucket = {
 			ISSUANCE_KEYS: cachedR2BucketWithRetries,
 		};
@@ -99,9 +97,4 @@ export class Context {
 			}
 		}
 	}
-}
-
-function normalizePrefix(prefix: string): string {
-	if (!prefix) return '';
-	return prefix.endsWith('/') ? prefix : `${prefix}/`;
 }
