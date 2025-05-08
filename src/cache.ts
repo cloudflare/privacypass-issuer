@@ -10,8 +10,8 @@ export const getDirectoryCache = async (): Promise<Cache> => {
 	return caches.open('response/issuer-directory');
 };
 
-export const DIRECTORY_CACHE_REQUEST = (hostname: string, prefix: string) => {
-	const base = prefix || hostname;
+export const DIRECTORY_CACHE_REQUEST = (hostname: string, prefix?: string) => {
+	const base = prefix === undefined ? hostname : prefix;
 	return new Request(`https://${base}${PRIVATE_TOKEN_ISSUER_DIRECTORY}`);
 };
 
@@ -308,15 +308,25 @@ export interface CachedR2BucketOptions {
 }
 
 export class CachedR2Bucket {
-	private bucket: R2Bucket;
+	private readonly bucket: R2Bucket;
+	private readonly prefix: string;
 	constructor(
-		private ctx: Context,
+		ctx: Context,
 		bucket: R2Bucket,
 		private cache: ReadableCache,
-		private prefix: string,
+		prefix?: string,
 		private ttl_in_ms = DEFAULT_R2_BUCKET_CACHE_TTL_IN_MS
 	) {
-		this.prefix = prefix;
+		if (prefix?.length === 0) {
+			throw new Error("CachedR2Bucket prefix can't be empty");
+		}
+		if (prefix?.endsWith('/') === true) {
+			throw new Error("CachedR2Bucket prefix can't end in a slash");
+		}
+		// we need to always use a prefix, even for unprefixed requests. This is so
+		// that when listing keys we can list only the "unprefixed" ones instead of
+		// listing all keys.
+		this.prefix = prefix === undefined ? '_global' : prefix;
 		this.bucket = new Proxy(bucket, {
 			get: (target, prop, receiver) => {
 				const method = Reflect.get(target, prop, receiver);
@@ -344,7 +354,7 @@ export class CachedR2Bucket {
 
 	// Helper to add the prefix stored in the bucket instance.
 	private addPrefix(key: string): string {
-		return this.prefix ? `${this.prefix}${key}` : key;
+		return `${this.prefix}/${key}`;
 	}
 
 	head(key: string, options?: CachedR2BucketOptions): Promise<CachedR2Object | null> {
@@ -367,23 +377,29 @@ export class CachedR2Bucket {
 		});
 	}
 
-	list(options?: R2ListOptions & CachedR2BucketOptions): Promise<CachedR2Objects> {
+	async list(options?: R2ListOptions & CachedR2BucketOptions): Promise<CachedR2Objects> {
 		// Ensure the list options include the prefix from the bucket if not already provided.
-		const actualOptions: R2ListOptions = { ...options };
-		if (!actualOptions.prefix && this.prefix) {
-			actualOptions.prefix = this.prefix;
-		}
+		const prefix =
+			options?.prefix === undefined ? `${this.prefix}/` : `${this.prefix}/${options.prefix}`;
 
+		const actualOptions: R2ListOptions = { ...options, prefix };
+
+		const list = async () => {
+			const objects = await this.bucket.list(actualOptions);
+			const value = new CachedR2Objects(objects);
+			for (const o of value.objects) {
+				o.key = o.key.slice(this.prefix.length + 1);
+			}
+			return value;
+		};
 		if (!this.shouldUseCache(options)) {
-			return this.bucket.list(actualOptions);
+			return list();
 		}
 
 		const cacheKey = `list/${JSON.stringify(actualOptions)}`;
 		return this.cache.read(cacheKey, async () => {
-			const objects = await this.bucket.list(actualOptions);
-			const value = new CachedR2Objects(objects);
 			return {
-				value,
+				value: await list(),
 				expiration: new Date(Date.now() + this.ttl_in_ms),
 			};
 		});

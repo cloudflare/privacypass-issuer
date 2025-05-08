@@ -76,7 +76,7 @@ describe('challenge handlers', () => {
 		const convertedPublicKey = util.convertEncToRSASSAPSS(publicKeyRawBytes);
 		const tokenKey = await keyToTokenKeyID(convertedPublicKey);
 
-		await ctx.env.ISSUANCE_KEYS.put(tokenKey.toString(), privateKeyRaw as ArrayBuffer, {
+		await ctx.bucket.ISSUANCE_KEYS.put(tokenKey.toString(), privateKeyRaw as ArrayBuffer, {
 			customMetadata: { publicKey: publicKeyBase64 },
 		});
 
@@ -495,7 +495,7 @@ describe('Integration Test for Key Clearing with Mocked Date', () => {
 			const fakeKeys = {
 				objects: [
 					{
-						key: 'key1',
+						key: '_global/key1',
 						uploaded: new Date(keyUpload1),
 						customMetadata: {},
 						etag: 'etag1',
@@ -505,7 +505,7 @@ describe('Integration Test for Key Clearing with Mocked Date', () => {
 						httpEtag: '',
 					},
 					{
-						key: 'key2',
+						key: '_global/key2',
 						uploaded: new Date(keyUpload2),
 						customMetadata: {},
 						etag: 'etag2',
@@ -515,7 +515,7 @@ describe('Integration Test for Key Clearing with Mocked Date', () => {
 						httpEtag: '',
 					},
 					{
-						key: 'key3',
+						key: '_global/key3',
 						uploaded: new Date(keyUpload3),
 						customMetadata: {},
 						etag: 'etag3',
@@ -533,9 +533,13 @@ describe('Integration Test for Key Clearing with Mocked Date', () => {
 			const deleteSpy = vi.spyOn(ctx.env.ISSUANCE_KEYS, 'delete').mockResolvedValue(undefined);
 
 			vi.setSystemTime(new Date(clearTime));
-			await handleClearKey(ctx, undefined);
+			await handleClearKey(ctx, new Request('http://host'));
 
-			expect(deleteSpy).toHaveBeenCalledWith(expect.arrayContaining(expectedDeletedKeys));
+			if (expectedDeletedKeys.length !== 0) {
+				expect(deleteSpy).toHaveBeenCalledWith(
+					expect.arrayContaining(expectedDeletedKeys.map(k => `_global/${k}`))
+				);
+			}
 		}
 	);
 });
