@@ -432,15 +432,14 @@ const clearKey = async (ctx: Context): Promise<string[]> => {
 	const toDeleteArray = [...toDelete];
 
 	if (toDeleteArray.length > 0) {
-		ctx.wshimLogger.log(`\nKeys cleared: ${toDeleteArray.join('\n')}`);
-	} else {
-		ctx.wshimLogger.log('\nNo keys were cleared.');
+		await ctx.bucket.ISSUANCE_KEYS.delete(toDeleteArray);
+		ctx.waitUntil(clearDirectoryCache(ctx));
 	}
-
-	while (toDeleteArray.length > 0) {
-		await ctx.bucket.ISSUANCE_KEYS.delete(toDeleteArray.splice(0, 1000));
-	}
-	ctx.waitUntil(clearDirectoryCache(ctx));
+	ctx.wshimLogger.log(
+		toDeleteArray.length > 0
+			? `\nKeys cleared: ${toDeleteArray.join('\n')}`
+			: '\nNo keys were cleared.'
+	);
 
 	return toDeleteArray;
 };
