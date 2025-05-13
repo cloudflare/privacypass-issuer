@@ -11,8 +11,8 @@ export const getDirectoryCache = async (): Promise<Cache> => {
 };
 
 export const DIRECTORY_CACHE_REQUEST = (hostname: string, prefix?: string) => {
-	const base = prefix === undefined ? hostname : prefix;
-	return new Request(`https://${base}${PRIVATE_TOKEN_ISSUER_DIRECTORY}`);
+	const formatedPrefix = prefix === undefined ? '' : `/${prefix}/`;
+	return new Request(`https://${hostname}${formatedPrefix}${PRIVATE_TOKEN_ISSUER_DIRECTORY}`);
 };
 
 export const clearDirectoryCache = async (ctx: Context): Promise<boolean> => {
