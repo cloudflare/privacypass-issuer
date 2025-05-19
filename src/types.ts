@@ -33,7 +33,6 @@ export interface ServiceInfo {
 export interface BaseRpcOptions {
 	prefix?: string;
 	serviceInfo: ServiceInfo;
-	op: 'tokenDirectory' | 'issue' | 'rotateKey' | 'clearKey';
 }
 
 export interface IssueOptions extends BaseRpcOptions {
