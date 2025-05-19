@@ -479,26 +479,29 @@ export class IssuerHandler extends WorkerEntrypoint<Bindings> {
 	}
 
 	async tokenDirectory(opts: BaseRpcOptions): Promise<Response> {
-		return this.withMetrics(opts, ctx =>
+		return this.withMetrics({ op: 'tokenDirectory', ...opts }, ctx =>
 			handleTokenDirectory(ctx, new Request(opts.serviceInfo.url))
 		);
 	}
 
 	async issue(opts: IssueOptions): Promise<IssueResponse> {
-		return this.withMetrics(opts, ctx =>
+		return this.withMetrics({ op: 'issue', ...opts }, ctx =>
 			issue(ctx, opts.tokenRequest, new URL(opts.serviceInfo.url).host, opts.contentType)
 		);
 	}
 
 	async rotateKey(opts: BaseRpcOptions): Promise<Uint8Array> {
-		return this.withMetrics(opts, ctx => rotateKey(ctx));
+		return this.withMetrics({ op: 'rotateKey', ...opts }, ctx => rotateKey(ctx));
 	}
 
 	async clearKey(opts: BaseRpcOptions): Promise<string[]> {
-		return this.withMetrics(opts, ctx => clearKey(ctx));
+		return this.withMetrics({ op: 'clearKey', ...opts }, ctx => clearKey(ctx));
 	}
 
-	private async withMetrics<T>(opts: BaseRpcOptions, fn: (ctx: Context) => Promise<T>): Promise<T> {
+	private async withMetrics<T>(
+		opts: BaseRpcOptions & { op: 'tokenDirectory' | 'issue' | 'rotateKey' | 'clearKey' },
+		fn: (ctx: Context) => Promise<T>
+	): Promise<T> {
 		const { prefix, serviceInfo, op } = opts;
 		const hostname = new URL(serviceInfo.url).hostname;
 		const ctx = this.context(serviceInfo.url, prefix);
