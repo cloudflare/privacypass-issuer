@@ -14,7 +14,7 @@ export const KeyError = {
 
 interface RegistryOptions {
 	endpoint: string;
-	bearerToken: string;
+	bearerToken?: string;
 	fetcher: typeof fetch;
 }
 
@@ -47,7 +47,8 @@ export class MetricsRegistry {
 	signedTokenTotal: CounterType;
 
 	constructor(env: Bindings) {
-		if (env.LOGGING_SHIM_TOKEN === undefined) throw new Error('LOGGING_SHIM_TOKEN is undefined');
+		if (env.LOGGING_SHIM_TOKEN === undefined && env.ENVIRONMENT === 'production')
+			throw new Error('LOGGING_SHIM_TOKEN is undefined');
 		this.env = env;
 		this.options = {
 			bearerToken: env.LOGGING_SHIM_TOKEN,
@@ -194,11 +195,22 @@ export class MetricsRegistry {
 	 */
 	async publish(): Promise<void> {
 		const { fetcher, endpoint, bearerToken } = this.options;
+		if (bearerToken === undefined) {
+			console.log('metrics flushing is disabled');
+			return;
+		}
 
-		await fetcher(endpoint, {
-			method: 'POST',
-			headers: { Authorization: `Bearer ${bearerToken}` },
-			body: this.registry.metrics(),
-		});
+		try {
+			const response = await fetcher(endpoint, {
+				method: 'POST',
+				headers: { Authorization: `Bearer ${bearerToken}` },
+				body: this.registry.metrics(),
+			});
+			if (!response.ok) {
+				console.error(`Failed to flush metrics: ${response.status} ${response.statusText}`);
+			}
+		} catch (error) {
+			console.error('Failed to flush metrics:', error);
+		}
 	}
 }

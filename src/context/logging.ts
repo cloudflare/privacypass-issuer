@@ -176,7 +176,7 @@ export class WshimLogger {
 	private env: Bindings;
 
 	private logs: LogEntry[] = [];
-	private serviceToken: string;
+	private serviceToken?: string;
 	private sampleRate: number;
 	private fetcher: typeof fetch;
 	private loggingEndpoint: string;
@@ -188,7 +188,9 @@ export class WshimLogger {
 			throw new Error('Sample rate must be a number between 0 and 1');
 		}
 
-		if (env.LOGGING_SHIM_TOKEN === undefined) throw new Error('LOGGING_SHIM_TOKEN is undefined');
+		if (env.LOGGING_SHIM_TOKEN === undefined && env.ENVIRONMENT === 'production')
+			throw new Error('LOGGING_SHIM_TOKEN is undefined');
+
 		this.serviceToken = env.LOGGING_SHIM_TOKEN;
 		this.sampleRate = sampleRate;
 		const socket = env.WSHIM_SOCKET;
@@ -244,6 +246,19 @@ export class WshimLogger {
 	}
 
 	public async flushLogs(): Promise<void> {
+		if (this.serviceToken === undefined) {
+			console.log('logs flushing is disabled');
+			for (const entry of this.logs) {
+				switch (entry.log_level) {
+					case 'error':
+						console.error(entry.error ?? 'unknown error', entry.message);
+						break;
+					default:
+						console.log(entry.message);
+				}
+			}
+			return;
+		}
 		if (this.logs.length === 0) return;
 
 		const defaultFields = this.defaultFields();
