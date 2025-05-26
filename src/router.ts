@@ -114,17 +114,24 @@ export class Router {
 			if (!Number.isFinite(sentrySampleRate)) {
 				sentrySampleRate = 1;
 			}
-			logger = new FlexibleLogger(env.ENVIRONMENT, {
-				context: ectx,
-				request: request,
-				dsn: env.SENTRY_DSN,
-				accessClientId: env.SENTRY_ACCESS_CLIENT_ID,
-				accessClientSecret: env.SENTRY_ACCESS_CLIENT_SECRET,
-				release: RELEASE,
-				service: env.SERVICE,
-				sampleRate: sentrySampleRate,
-				coloName: request?.cf?.colo as string,
-			});
+			logger = new FlexibleLogger(
+				env.ENVIRONMENT,
+				env.SENTRY_DSN !== null &&
+				env.SENTRY_ACCESS_CLIENT_ID !== null &&
+				env.SENTRY_ACCESS_CLIENT_SECRET !== null
+					? {
+							context: ectx,
+							request: request,
+							dsn: env.SENTRY_DSN,
+							accessClientId: env.SENTRY_ACCESS_CLIENT_ID,
+							accessClientSecret: env.SENTRY_ACCESS_CLIENT_SECRET,
+							release: RELEASE,
+							service: env.SERVICE,
+							sampleRate: sentrySampleRate,
+							coloName: request?.cf?.colo as string,
+						}
+					: undefined
+			);
 		}
 
 		return new Context(
