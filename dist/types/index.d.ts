@@ -35,21 +35,25 @@ export interface Bindings {
 	DIRECTORY_CACHE_MAX_AGE_SECONDS: string;
 	ENVIRONMENT: string;
 	SERVICE: string;
-	SENTRY_ACCESS_CLIENT_ID: string;
-	SENTRY_ACCESS_CLIENT_SECRET: string;
-	SENTRY_DSN: string;
-	SENTRY_SAMPLE_RATE: string;
+	SENTRY_ACCESS_CLIENT_ID: string | null;
+	SENTRY_ACCESS_CLIENT_SECRET: string | null;
+	SENTRY_DSN: string | null;
+	SENTRY_SAMPLE_RATE: string | null;
 	ISSUANCE_KEYS: R2Bucket$1;
-	PERFORMANCE: Performance$1 | undefined;
+	PERFORMANCE: Performance$1 | null;
 	VERSION_METADATA: ScriptVersion;
-	ROTATION_CRON_STRING?: string;
+	ROTATION_CRON_STRING: string | null;
 	KEY_LIFESPAN_IN_MS: string;
 	KEY_NOT_BEFORE_DELAY_IN_MS: string;
-	MINIMUM_FRESHEST_KEYS: string;
-	LOGGING_SHIM_TOKEN: string;
-	WSHIM_SOCKET?: Fetcher;
-	WSHIM_ENDPOINT: string;
+	MINIMUM_FRESHEST_KEYS: string | null;
+	LOGGING_SHIM_TOKEN: string | null;
+	WSHIM_SOCKET: Fetcher | null;
+	WSHIM_ENDPOINT: string | null;
 }
+export type NonNullableFields<T> = {
+	[P in keyof T]: T[P] extends infer U | null ? U : T[P];
+};
+export type UncheckedBindings = Partial<NonNullableFields<Bindings>>;
 export type CacheElement<T> = {
 	value: T;
 	expiration: Date;
@@ -103,28 +107,17 @@ export interface Logger {
 	}): void;
 }
 declare class WshimLogger {
-	private request;
-	private env;
 	private logs;
-	private serviceToken;
 	private sampleRate;
-	private fetcher;
-	private loggingEndpoint;
-	constructor(request: Request, env: Bindings, sampleRate?: number);
+	private wshimOptions?;
+	private readonly defaultFields;
+	constructor(request: Request, env: Bindings, logger: Logger, sampleRate?: number);
 	private shouldLog;
-	private defaultFields;
 	log(...msg: unknown[]): void;
 	error(...msg: unknown[]): void;
 	flushLogs(): Promise<void>;
 }
-export interface RegistryOptions {
-	endpoint: string;
-	bearerToken: string;
-	fetcher: typeof fetch;
-}
 declare class MetricsRegistry {
-	env: Bindings;
-	options: RegistryOptions;
 	registry: RegistryType;
 	asyncRetriesTotal: CounterType;
 	directoryCacheMissTotal: CounterType;
@@ -137,8 +130,12 @@ declare class MetricsRegistry {
 	requestsTotal: CounterType;
 	r2RequestsDurationMs: HistogramType;
 	signedTokenTotal: CounterType;
-	constructor(env: Bindings);
-	private defaultLabels;
+	defaultLabels: {
+		env: string;
+		service: string;
+	};
+	wshimOptions?: WshimOptions;
+	constructor(env: Bindings, logger: Logger);
 	private createCounter;
 	private createHistogram;
 	private create;
@@ -160,6 +157,14 @@ export interface BaseRpcOptions {
 export interface IssueOptions extends BaseRpcOptions {
 	tokenRequest: ArrayBuffer;
 	contentType: string;
+}
+declare class WshimOptions {
+	readonly token: string;
+	readonly socket: Fetcher;
+	readonly endpoint: string;
+	static init(env: Bindings, logger: Logger): WshimOptions | undefined;
+	private constructor();
+	flush(body: BodyInit): Promise<void>;
 }
 export type WaitUntilFunc = (p: Promise<unknown>) => void;
 declare class Context {
@@ -251,8 +256,8 @@ export declare class IssuerHandler extends WorkerEntrypoint<Bindings> {
 	private withMetrics;
 }
 declare const _default: {
-	fetch(request: Request, env: Bindings, ctx: ExecutionContext): Promise<Response>;
-	scheduled(event: ScheduledEvent, env: Bindings, ctx: ExecutionContext): Promise<void>;
+	fetch(request: Request, env: UncheckedBindings, ctx: ExecutionContext): Promise<Response>;
+	scheduled(event: ScheduledEvent, env: UncheckedBindings, ctx: ExecutionContext): Promise<void>;
 };
 
 export {

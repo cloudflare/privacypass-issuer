@@ -3,6 +3,8 @@
 
 import { CounterType, HistogramType, Labels, RegistryType, Registry } from 'promjs-plus';
 import { Bindings } from '../bindings';
+import { WshimOptions } from '.';
+import { Logger } from './logging';
 
 export const KeyError = {
 	NOT_FOUND: 'not-found',
@@ -11,12 +13,6 @@ export const KeyError = {
 	MISSING_PRIVATE_KEY: 'missing-private-key',
 	MISSING_PUBLIC_KEY: 'missing-public-key',
 };
-
-interface RegistryOptions {
-	endpoint: string;
-	bearerToken: string;
-	fetcher: typeof fetch;
-}
 
 export interface DefaultLabels {
 	env: string;
@@ -29,9 +25,6 @@ const HISTOGRAM_MS_BUCKETS = [50, 100, 200, 400, 1000, 2 * 1000, 4 * 1000];
  * A wrapper around the promjs registry to manage registering and publishing metrics
  */
 export class MetricsRegistry {
-	env: Bindings;
-
-	options: RegistryOptions;
 	registry: RegistryType;
 
 	asyncRetriesTotal: CounterType;
@@ -45,14 +38,18 @@ export class MetricsRegistry {
 	requestsTotal: CounterType;
 	r2RequestsDurationMs: HistogramType;
 	signedTokenTotal: CounterType;
+	defaultLabels: {
+		env: string;
+		service: string;
+	};
+	wshimOptions?: WshimOptions;
 
-	constructor(env: Bindings) {
-		this.env = env;
-		this.options = {
-			bearerToken: env.LOGGING_SHIM_TOKEN,
-			endpoint: `${env.WSHIM_ENDPOINT}/prometheus`,
-			fetcher: env.WSHIM_SOCKET?.fetch?.bind(env.WSHIM_SOCKET) ?? fetch,
+	constructor(env: Bindings, logger: Logger) {
+		this.defaultLabels = {
+			env: env.ENVIRONMENT,
+			service: env.SERVICE,
 		};
+		this.wshimOptions = WshimOptions.init(env, logger);
 
 		this.registry = new Registry();
 
@@ -111,16 +108,9 @@ export class MetricsRegistry {
 		);
 	}
 
-	private defaultLabels(): DefaultLabels {
-		return {
-			env: this.env.ENVIRONMENT,
-			service: this.env.SERVICE,
-		};
-	}
-
 	private createCounter(name: string, help?: string): CounterType {
 		const counter = this.registry.create('counter', name, help);
-		const defaultLabels = this.defaultLabels();
+		const defaultLabels = this.defaultLabels;
 		return new Proxy(counter, {
 			get(target, prop, receiver) {
 				if (['collect', 'get', 'inc', 'reset'].includes(prop.toString())) {
@@ -142,7 +132,7 @@ export class MetricsRegistry {
 
 	private createHistogram(name: string, help?: string, histogramBuckets?: number[]): HistogramType {
 		const histogram = this.registry.create('histogram', name, help, histogramBuckets);
-		const defaultLabels = this.defaultLabels();
+		const defaultLabels = this.defaultLabels;
 		return new Proxy(histogram, {
 			get(target, prop, receiver) {
 				if (['collect', 'get', 'reset'].includes(prop.toString())) {
@@ -190,12 +180,13 @@ export class MetricsRegistry {
 	 * This function is a no-op in test and wrangler environements
 	 */
 	async publish(): Promise<void> {
-		const { fetcher, endpoint, bearerToken } = this.options;
+		if (this.wshimOptions === undefined) {
+			if (this.defaultLabels.service !== 'unit-tests') {
+				console.log('metrics flushing is disabled');
+			}
+			return;
+		}
 
-		await fetcher(endpoint, {
-			method: 'POST',
-			headers: { Authorization: `Bearer ${bearerToken}` },
-			body: this.registry.metrics(),
-		});
+		await this.wshimOptions.flush(this.registry.metrics());
 	}
 }

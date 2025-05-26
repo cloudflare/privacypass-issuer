@@ -22,12 +22,6 @@ import {
 import { getDirectoryCache } from '../src/cache';
 import { shouldRotateKey, shouldClearKey } from '../src/utils/keyRotation';
 const { TokenRequest, BLIND_RSA } = publicVerif;
-const {
-	TokenRequest: batchedTokenRequest,
-	Client: BatchedTokensClient,
-	BatchedTokenResponse,
-	BatchedTokenRequest,
-} = arbitraryBatched;
 
 const sampleURL = 'http://localhost';
 
@@ -44,8 +38,6 @@ const keyToTokenKeyID = async (key: Uint8Array): Promise<number> => {
 	const u8 = new Uint8Array(hash);
 	return u8[u8.length - 1];
 };
-
-const IncomingRequest = Request<unknown, IncomingRequestCfProperties>;
 
 describe('challenge handlers', () => {
 	let ctx: Context;
@@ -450,7 +442,7 @@ describe('Integration Test for Key Clearing with Mocked Date', () => {
 	beforeEach(async () => {
 		ctx = getContext({
 			request: new Request(sampleURL),
-			env: env,
+			env,
 			ectx: new createExecutionContext(),
 		});
 	});

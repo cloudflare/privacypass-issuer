@@ -8,6 +8,48 @@ import { Logger, WshimLogger } from './logging';
 import { MetricsRegistry } from './metrics';
 import { ServiceInfo } from '../types';
 
+export class WshimOptions {
+	public static init(env: Bindings, logger: Logger): WshimOptions | undefined {
+		if (env.LOGGING_SHIM_TOKEN && env.WSHIM_SOCKET && env.WSHIM_ENDPOINT) {
+			return new WshimOptions(env.LOGGING_SHIM_TOKEN, env.WSHIM_SOCKET, env.WSHIM_ENDPOINT);
+		} else {
+			if (env.LOGGING_SHIM_TOKEN === null && env.ENVIRONMENT !== 'dev') {
+				logger.captureException(new Error('LOGGING_SHIM_TOKEN is undefined'));
+			}
+			if (env.WSHIM_SOCKET === null && env.ENVIRONMENT !== 'dev') {
+				logger.captureException(new Error('WSHIM_SOCKET is undefined'));
+			}
+			if (env.WSHIM_ENDPOINT === null && env.ENVIRONMENT !== 'dev') {
+				logger.captureException(new Error('WSHIM_ENDPOINT is undefined'));
+			}
+		}
+		return undefined;
+	}
+
+	private constructor(
+		public readonly token: string,
+		public readonly socket: Fetcher,
+		public readonly endpoint: string
+	) {}
+
+	public async flush(body: BodyInit) {
+		try {
+			const response = await this.socket.fetch(this.endpoint, {
+				method: 'POST',
+				headers: { Authorization: `Bearer ${this.token}` },
+				body,
+			});
+			if (!response.ok) {
+				console.error(
+					`Failed to flush to ${this.endpoint}: ${response.status} ${response.statusText}`
+				);
+			}
+		} catch (error) {
+			console.error(`Failed to flush to ${this.endpoint}:`, error);
+		}
+	}
+}
+
 export type WaitUntilFunc = (p: Promise<unknown>) => void;
 export class Context {
 	public hostname: string;

@@ -4,7 +4,12 @@
 // eslint-disable-next-line @typescript-eslint/triple-slash-reference
 /// <reference path="./global.d.ts" />
 
-import { Bindings } from './bindings';
+import {
+	Bindings,
+	DEFAULT_MINIMUM_FRESHEST_KEYS,
+	UncheckedBindings,
+	checkMandatoryBindings,
+} from './bindings';
 import { Context } from './context';
 import { Router } from './router';
 import {
@@ -309,7 +314,9 @@ export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 	}
 
 	// there is no reason for an auditor to continue serving keys beyond the minimum requirement
-	const freshestKeyCount = Number.parseInt(ctx.env.MINIMUM_FRESHEST_KEYS);
+	const freshestKeyCount = Number.parseInt(
+		ctx.env.MINIMUM_FRESHEST_KEYS ?? DEFAULT_MINIMUM_FRESHEST_KEYS
+	);
 	const keys = keyList.objects
 		.sort((a, b) => new Date(b.uploaded).getTime() - new Date(a.uploaded).getTime())
 		.slice(0, freshestKeyCount);
@@ -414,7 +421,9 @@ const clearKey = async (ctx: Context): Promise<string[]> => {
 	}
 
 	const lifespanInMs = Number.parseInt(ctx.env.KEY_LIFESPAN_IN_MS);
-	const freshestKeyCount = Number.parseInt(ctx.env.MINIMUM_FRESHEST_KEYS);
+	const freshestKeyCount = Number.parseInt(
+		ctx.env.MINIMUM_FRESHEST_KEYS ?? DEFAULT_MINIMUM_FRESHEST_KEYS
+	);
 
 	keys.objects.sort((a, b) => new Date(b.uploaded).getTime() - new Date(a.uploaded).getTime());
 
@@ -542,19 +551,20 @@ export class IssuerHandler extends WorkerEntrypoint<Bindings> {
 }
 
 export default {
-	async fetch(request: Request, env: Bindings, ctx: ExecutionContext) {
-		const issuerHandler = new IssuerHandler(ctx, env);
+	async fetch(request: Request, env: UncheckedBindings, ctx: ExecutionContext) {
+		const issuerHandler = new IssuerHandler(ctx, checkMandatoryBindings(env));
 		return issuerHandler.fetch(request);
 	},
 
-	async scheduled(event: ScheduledEvent, env: Bindings, ctx: ExecutionContext) {
+	async scheduled(event: ScheduledEvent, env: UncheckedBindings, ctx: ExecutionContext) {
 		const sampleRequest = new Request(`https://schedule.example.com`);
 
-		const context = Router.buildContext(sampleRequest, env, ctx);
+		const checkedEnv = checkMandatoryBindings(env);
+		const context = Router.buildContext(sampleRequest, checkedEnv, ctx);
 		const date = new Date(event.scheduledTime);
 
 		try {
-			if (shouldRotateKey(date, env)) {
+			if (shouldRotateKey(date, checkedEnv)) {
 				await handleRotateKey(context, sampleRequest);
 			} else {
 				await handleClearKey(context, sampleRequest);
