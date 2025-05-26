@@ -47,6 +47,7 @@ export class MetricsRegistry {
 	signedTokenTotal: CounterType;
 
 	constructor(env: Bindings) {
+		if (env.LOGGING_SHIM_TOKEN === undefined) throw new Error('LOGGING_SHIM_TOKEN is undefined');
 		this.env = env;
 		this.options = {
 			bearerToken: env.LOGGING_SHIM_TOKEN,
@@ -112,6 +113,8 @@ export class MetricsRegistry {
 	}
 
 	private defaultLabels(): DefaultLabels {
+		if (this.env.ENVIRONMENT === undefined) throw new Error('this.env.ENVIRONMENT is undefined');
+		if (this.env.SERVICE === undefined) throw new Error('this.env.ENVIRONMENT is undefined');
 		return {
 			env: this.env.ENVIRONMENT,
 			service: this.env.SERVICE,

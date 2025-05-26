@@ -114,6 +114,13 @@ export class Router {
 			if (!Number.isFinite(sentrySampleRate)) {
 				sentrySampleRate = 1;
 			}
+			if (env.ENVIRONMENT === undefined) throw new Error('ENVIRONMENT is undefined');
+			if (env.SENTRY_DSN === undefined) throw new Error('SENTRY_DSN is undefined');
+			if (env.SENTRY_ACCESS_CLIENT_ID === undefined)
+				throw new Error('SENTRY_ACCESS_CLIENT_ID is undefined');
+			if (env.SENTRY_ACCESS_CLIENT_SECRET === undefined)
+				throw new Error('SENTRY_ACCESS_CLIENT_SECRET is undefined');
+			if (env.SERVICE === undefined) throw new Error('SERVICE is undefined');
 			logger = new FlexibleLogger(env.ENVIRONMENT, {
 				context: ectx,
 				request: request,

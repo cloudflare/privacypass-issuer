@@ -188,6 +188,7 @@ export class WshimLogger {
 			throw new Error('Sample rate must be a number between 0 and 1');
 		}
 
+		if (env.LOGGING_SHIM_TOKEN === undefined) throw new Error('LOGGING_SHIM_TOKEN is undefined');
 		this.serviceToken = env.LOGGING_SHIM_TOKEN;
 		this.sampleRate = sampleRate;
 		const socket = env.WSHIM_SOCKET;
