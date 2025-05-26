@@ -47,7 +47,7 @@ export class MetricsRegistry {
 	signedTokenTotal: CounterType;
 
 	constructor(env: Bindings) {
-		if (env.LOGGING_SHIM_TOKEN === undefined && env.ENVIRONMENT === 'production')
+		if (env.LOGGING_SHIM_TOKEN === undefined && env.ENVIRONMENT !== 'dev')
 			throw new Error('LOGGING_SHIM_TOKEN is undefined');
 		this.env = env;
 		this.options = {

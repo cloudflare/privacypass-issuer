@@ -115,23 +115,25 @@ export class Router {
 				sentrySampleRate = 1;
 			}
 			if (env.ENVIRONMENT === undefined) throw new Error('ENVIRONMENT is undefined');
-			if (env.SENTRY_DSN === undefined) throw new Error('SENTRY_DSN is undefined');
-			if (env.SENTRY_ACCESS_CLIENT_ID === undefined)
-				throw new Error('SENTRY_ACCESS_CLIENT_ID is undefined');
-			if (env.SENTRY_ACCESS_CLIENT_SECRET === undefined)
-				throw new Error('SENTRY_ACCESS_CLIENT_SECRET is undefined');
-			if (env.SERVICE === undefined) throw new Error('SERVICE is undefined');
-			logger = new FlexibleLogger(env.ENVIRONMENT, {
-				context: ectx,
-				request: request,
-				dsn: env.SENTRY_DSN,
-				accessClientId: env.SENTRY_ACCESS_CLIENT_ID,
-				accessClientSecret: env.SENTRY_ACCESS_CLIENT_SECRET,
-				release: RELEASE,
-				service: env.SERVICE,
-				sampleRate: sentrySampleRate,
-				coloName: request?.cf?.colo as string,
-			});
+			logger = new FlexibleLogger(
+				env.ENVIRONMENT,
+				env.SENTRY_DSN !== undefined &&
+				env.SENTRY_ACCESS_CLIENT_ID !== undefined &&
+				env.SENTRY_ACCESS_CLIENT_SECRET !== undefined &&
+				env.SERVICE !== undefined
+					? {
+							context: ectx,
+							request: request,
+							dsn: env.SENTRY_DSN,
+							accessClientId: env.SENTRY_ACCESS_CLIENT_ID,
+							accessClientSecret: env.SENTRY_ACCESS_CLIENT_SECRET,
+							release: RELEASE,
+							service: env.SERVICE,
+							sampleRate: sentrySampleRate,
+							coloName: request?.cf?.colo as string,
+						}
+					: undefined
+			);
 		}
 
 		return new Context(

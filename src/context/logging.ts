@@ -32,11 +32,14 @@ interface SentryOptions {
 
 export class FlexibleLogger implements Logger {
 	logger: Logger;
-	constructor(environment: string, options: SentryOptions) {
+	constructor(environment: string, options?: SentryOptions) {
 		if (environment === 'dev') {
+			console.log('sentry is disabled');
 			this.logger = new ConsoleLogger();
-		} else {
+		} else if (options !== undefined) {
 			this.logger = new SentryLogger(environment, options);
+		} else {
+			throw new Error('Not all sentry options were defined');
 		}
 	}
 	addBreadcrumb(breadcrumb: Breadcrumb): void {
@@ -188,7 +191,7 @@ export class WshimLogger {
 			throw new Error('Sample rate must be a number between 0 and 1');
 		}
 
-		if (env.LOGGING_SHIM_TOKEN === undefined && env.ENVIRONMENT === 'production')
+		if (env.LOGGING_SHIM_TOKEN === undefined && env.ENVIRONMENT !== 'dev')
 			throw new Error('LOGGING_SHIM_TOKEN is undefined');
 
 		this.serviceToken = env.LOGGING_SHIM_TOKEN;
