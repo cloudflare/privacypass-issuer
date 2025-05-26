@@ -156,7 +156,6 @@ export interface ServiceInfo {
 export interface BaseRpcOptions {
 	prefix?: string;
 	serviceInfo: ServiceInfo;
-	op: "tokenDirectory" | "issue" | "rotateKey" | "clearKey";
 }
 export interface IssueOptions extends BaseRpcOptions {
 	tokenRequest: ArrayBuffer;
@@ -197,6 +196,30 @@ declare class Context {
 	 * It is important to wait for the promises in the array to complete sequentially since new promises created by async tasks may be added to the end of the array while this function runs.
 	 */
 	waitForPromises(): Promise<void>;
+}
+declare class HTTPError extends Error {
+	status: number;
+	constructor(message?: string, status?: number);
+}
+export declare class InvalidTokenTypeError extends HTTPError {
+	static CODE: string;
+	code: string;
+	constructor(message?: string);
+}
+export declare class InvalidBatchedTokenTypeError extends HTTPError {
+	static CODE: string;
+	code: string;
+	constructor(message?: string);
+}
+export declare class BadTokenKeyRequestedError extends HTTPError {
+	static CODE: string;
+	code: string;
+	constructor(message?: string);
+}
+export declare class MismatchedTokenKeyIDError extends HTTPError {
+	static CODE: string;
+	code: string;
+	constructor(message?: string);
 }
 /**
  * The response returned by the `issue()` function.

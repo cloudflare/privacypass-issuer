@@ -45,6 +45,13 @@ import { WorkerEntrypoint } from 'cloudflare:workers';
 
 import { BaseRpcOptions, IssueOptions } from './types';
 
+export {
+	InvalidTokenTypeError,
+	InvalidBatchedTokenTypeError,
+	BadTokenKeyRequestedError,
+	MismatchedTokenKeyIDError,
+} from './errors';
+
 const keyToTokenKeyID = async (key: Uint8Array): Promise<number> => {
 	const hash = await crypto.subtle.digest('SHA-256', key);
 	const u8 = new Uint8Array(hash);
