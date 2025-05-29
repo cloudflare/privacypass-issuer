@@ -179,11 +179,18 @@ export const handleBatchedTokenRequest = async (
 	const issuer = new Issuer(BlindRSAMode.PSS, domain, sk, pk, { supportsRSARAW: true });
 	const batchedTokenIssuer = new BatchedTokensIssuer(issuer);
 	const batchedTokenResponse = await batchedTokenIssuer.issue(batchedTokenRequest);
+
+	ctx.metrics.issuanceRequestTotal.inc({ version: ctx.env.VERSION_METADATA.id ?? RELEASE });
+	const signedTokenCount = batchedTokenResponse.tokenResponses.reduce(
+		(c, t) => c + (t.tokenResponse !== null ? 1 : 0),
+		0
+	);
+	ctx.metrics.signedTokenTotal.add(signedTokenCount, { key_id: keyID });
+
 	const responseBytes = batchedTokenResponse.serialize();
 
 	// Set status code based on whether any token response is null.
-	const partial = batchedTokenResponse.tokenResponses.some(resp => resp.tokenResponse === null);
-	const status = partial ? 206 : 200;
+	const status = signedTokenCount != batchedTokenResponse.tokenResponses.length ? 206 : 200;
 
 	return {
 		serialized: responseBytes,
