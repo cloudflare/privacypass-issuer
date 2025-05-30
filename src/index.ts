@@ -4,7 +4,7 @@
 // eslint-disable-next-line @typescript-eslint/triple-slash-reference
 /// <reference path="./global.d.ts" />
 
-import { Bindings } from './bindings';
+import { Bindings, DEFAULT_MINIMUM_FRESHEST_KEYS } from './bindings';
 import { Context } from './context';
 import { Router } from './router';
 import {
@@ -309,7 +309,9 @@ export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 	}
 
 	// there is no reason for an auditor to continue serving keys beyond the minimum requirement
-	const freshestKeyCount = Number.parseInt(ctx.env.MINIMUM_FRESHEST_KEYS);
+	const freshestKeyCount = Number.parseInt(
+		ctx.env.MINIMUM_FRESHEST_KEYS ?? DEFAULT_MINIMUM_FRESHEST_KEYS
+	);
 	const keys = keyList.objects
 		.sort((a, b) => new Date(b.uploaded).getTime() - new Date(a.uploaded).getTime())
 		.slice(0, freshestKeyCount);
@@ -332,6 +334,8 @@ export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 	);
 	const etag = `"${hexEncode(digest)}"`;
 
+	if (ctx.env.DIRECTORY_CACHE_MAX_AGE_SECONDS === undefined)
+		throw new Error('DIRECTORY_CACHE_MAX_AGE_SECONDS is undefined');
 	const response = new Response(body, {
 		headers: {
 			'content-type': MediaType.PRIVATE_TOKEN_ISSUER_DIRECTORY,
@@ -381,6 +385,8 @@ const rotateKey = async (ctx: Context): Promise<Uint8Array> => {
 		// Otherwise, this loop is going to be infinite. With 255 keys, this iteration might take a while.
 	} while ((await ctx.bucket.ISSUANCE_KEYS.head(tokenKeyID.toString())) !== null);
 
+	if (ctx.env.KEY_NOT_BEFORE_DELAY_IN_MS === undefined)
+		throw new Error('KEY_NOT_BEFORE_DELAY_IN_MS is undefined');
 	const metadata: StorageMetadata = {
 		notBefore: ((Date.now() + Number.parseInt(ctx.env.KEY_NOT_BEFORE_DELAY_IN_MS)) / 1000).toFixed(
 			0
@@ -413,8 +419,11 @@ const clearKey = async (ctx: Context): Promise<string[]> => {
 		return [];
 	}
 
+	if (ctx.env.KEY_LIFESPAN_IN_MS === undefined) throw new Error('KEY_LIFESPAN_IN_MS is undefined');
 	const lifespanInMs = Number.parseInt(ctx.env.KEY_LIFESPAN_IN_MS);
-	const freshestKeyCount = Number.parseInt(ctx.env.MINIMUM_FRESHEST_KEYS);
+	const freshestKeyCount = Number.parseInt(
+		ctx.env.MINIMUM_FRESHEST_KEYS ?? DEFAULT_MINIMUM_FRESHEST_KEYS
+	);
 
 	keys.objects.sort((a, b) => new Date(b.uploaded).getTime() - new Date(a.uploaded).getTime());
 

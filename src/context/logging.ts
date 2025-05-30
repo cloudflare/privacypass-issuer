@@ -32,11 +32,14 @@ interface SentryOptions {
 
 export class FlexibleLogger implements Logger {
 	logger: Logger;
-	constructor(environment: string, options: SentryOptions) {
+	constructor(environment: string, options?: SentryOptions) {
 		if (environment === 'dev') {
+			console.log('sentry is disabled');
 			this.logger = new ConsoleLogger();
-		} else {
+		} else if (options !== undefined) {
 			this.logger = new SentryLogger(environment, options);
+		} else {
+			throw new Error('Not all sentry options were defined');
 		}
 	}
 	addBreadcrumb(breadcrumb: Breadcrumb): void {
@@ -176,7 +179,7 @@ export class WshimLogger {
 	private env: Bindings;
 
 	private logs: LogEntry[] = [];
-	private serviceToken: string;
+	private serviceToken?: string;
 	private sampleRate: number;
 	private fetcher: typeof fetch;
 	private loggingEndpoint: string;
@@ -187,6 +190,9 @@ export class WshimLogger {
 		if (typeof sampleRate !== 'number' || isNaN(sampleRate) || sampleRate < 0 || sampleRate > 1) {
 			throw new Error('Sample rate must be a number between 0 and 1');
 		}
+
+		if (env.LOGGING_SHIM_TOKEN === undefined && env.ENVIRONMENT !== 'dev')
+			throw new Error('LOGGING_SHIM_TOKEN is undefined');
 
 		this.serviceToken = env.LOGGING_SHIM_TOKEN;
 		this.sampleRate = sampleRate;
@@ -243,6 +249,19 @@ export class WshimLogger {
 	}
 
 	public async flushLogs(): Promise<void> {
+		if (this.serviceToken === undefined) {
+			console.log('logs flushing is disabled');
+			for (const entry of this.logs) {
+				switch (entry.log_level) {
+					case 'error':
+						console.error(entry.error ?? 'unknown error', entry.message);
+						break;
+					default:
+						console.log(entry.message);
+				}
+			}
+			return;
+		}
 		if (this.logs.length === 0) return;
 
 		const defaultFields = this.defaultFields();

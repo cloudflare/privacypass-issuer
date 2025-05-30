@@ -29,6 +29,7 @@ export class Context {
 		// eslint-disable-next-line @typescript-eslint/no-this-alias
 		const ctx = this;
 		const cache = new CascadingCache(new InMemoryCache(ctx), new APICache(ctx, 'r2/issuance_keys'));
+		if (env.ISSUANCE_KEYS === undefined) throw new Error('ISSUANCE_KEYS is undefined');
 		const cachedR2Bucket = new CachedR2Bucket(ctx, env.ISSUANCE_KEYS, cache, prefix);
 
 		const cachedR2BucketWithRetries = new Proxy(cachedR2Bucket, {

@@ -32,23 +32,23 @@ declare global {
 	}
 }
 export interface Bindings {
-	DIRECTORY_CACHE_MAX_AGE_SECONDS: string;
-	ENVIRONMENT: string;
-	SERVICE: string;
-	SENTRY_ACCESS_CLIENT_ID: string;
-	SENTRY_ACCESS_CLIENT_SECRET: string;
-	SENTRY_DSN: string;
-	SENTRY_SAMPLE_RATE: string;
-	ISSUANCE_KEYS: R2Bucket$1;
-	PERFORMANCE: Performance$1 | undefined;
+	DIRECTORY_CACHE_MAX_AGE_SECONDS?: string;
+	ENVIRONMENT?: string;
+	SERVICE?: string;
+	SENTRY_ACCESS_CLIENT_ID?: string;
+	SENTRY_ACCESS_CLIENT_SECRET?: string;
+	SENTRY_DSN?: string;
+	SENTRY_SAMPLE_RATE?: string;
+	ISSUANCE_KEYS?: R2Bucket$1;
+	PERFORMANCE?: Performance$1;
 	VERSION_METADATA: ScriptVersion;
 	ROTATION_CRON_STRING?: string;
-	KEY_LIFESPAN_IN_MS: string;
-	KEY_NOT_BEFORE_DELAY_IN_MS: string;
-	MINIMUM_FRESHEST_KEYS: string;
-	LOGGING_SHIM_TOKEN: string;
+	KEY_LIFESPAN_IN_MS?: string;
+	KEY_NOT_BEFORE_DELAY_IN_MS?: string;
+	MINIMUM_FRESHEST_KEYS?: string;
+	LOGGING_SHIM_TOKEN?: string;
 	WSHIM_SOCKET?: Fetcher;
-	WSHIM_ENDPOINT: string;
+	WSHIM_ENDPOINT?: string;
 }
 export type CacheElement<T> = {
 	value: T;
