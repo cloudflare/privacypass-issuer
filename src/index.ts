@@ -553,10 +553,20 @@ export default {
 		const context = Router.buildContext(sampleRequest, env, ctx);
 		const date = new Date(event.scheduledTime);
 
-		if (shouldRotateKey(date, env)) {
-			await handleRotateKey(context, sampleRequest);
-		} else {
-			await handleClearKey(context, sampleRequest);
+		try {
+			if (shouldRotateKey(date, env)) {
+				await handleRotateKey(context, sampleRequest);
+			} else {
+				await handleClearKey(context, sampleRequest);
+			}
+		} catch (err) {
+			await handleError(context, err as Error, {
+				path: '/cron',
+				status: err instanceof HTTPError ? err.status : 500,
+			});
+			throw err;
+		} finally {
+			ctx.waitUntil(context.postProcessing());
 		}
 	},
 };
