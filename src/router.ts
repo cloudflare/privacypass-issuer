@@ -103,9 +103,6 @@ export class Router {
 		ectx: ExecutionContext,
 		prefix?: string
 	): Context {
-		const metrics = new MetricsRegistry(env);
-		const wshimLogger = new WshimLogger(request, env);
-
 		let logger: Logger;
 		if (!env.SENTRY_SAMPLE_RATE || parseFloat(env.SENTRY_SAMPLE_RATE) === 0) {
 			logger = new ConsoleLogger();
@@ -114,18 +111,28 @@ export class Router {
 			if (!Number.isFinite(sentrySampleRate)) {
 				sentrySampleRate = 1;
 			}
-			logger = new FlexibleLogger(env.ENVIRONMENT, {
-				context: ectx,
-				request: request,
-				dsn: env.SENTRY_DSN,
-				accessClientId: env.SENTRY_ACCESS_CLIENT_ID,
-				accessClientSecret: env.SENTRY_ACCESS_CLIENT_SECRET,
-				release: RELEASE,
-				service: env.SERVICE,
-				sampleRate: sentrySampleRate,
-				coloName: request?.cf?.colo as string,
-			});
+			logger = new FlexibleLogger(
+				env.ENVIRONMENT,
+				env.SENTRY_DSN !== null &&
+				env.SENTRY_ACCESS_CLIENT_ID !== null &&
+				env.SENTRY_ACCESS_CLIENT_SECRET !== null
+					? {
+							context: ectx,
+							request: request,
+							dsn: env.SENTRY_DSN,
+							accessClientId: env.SENTRY_ACCESS_CLIENT_ID,
+							accessClientSecret: env.SENTRY_ACCESS_CLIENT_SECRET,
+							release: RELEASE,
+							service: env.SERVICE,
+							sampleRate: sentrySampleRate,
+							coloName: request?.cf?.colo as string,
+						}
+					: undefined
+			);
 		}
+
+		const metrics = new MetricsRegistry(env, logger);
+		const wshimLogger = new WshimLogger(request, env, logger);
 
 		return new Context(
 			request,

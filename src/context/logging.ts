@@ -5,6 +5,7 @@ import type { Context } from 'toucan-js/dist/types';
 import { RewriteFrames, Toucan } from 'toucan-js';
 import { Breadcrumb } from '@sentry/types';
 import { Bindings } from '../bindings';
+import { WshimOptions } from '.';
 
 // End toucan-js types
 
@@ -32,9 +33,13 @@ interface SentryOptions {
 
 export class FlexibleLogger implements Logger {
 	logger: Logger;
-	constructor(environment: string, options: SentryOptions) {
-		if (environment === 'dev') {
-			this.logger = new ConsoleLogger();
+	constructor(environment: string, options?: SentryOptions) {
+		if (options === undefined) {
+			if (environment === 'dev') {
+				console.log('sentry is disabled');
+				this.logger = new ConsoleLogger();
+			}
+			throw new Error('Not all sentry options were defined');
 		} else {
 			this.logger = new SentryLogger(environment, options);
 		}
@@ -172,44 +177,32 @@ interface LogEntry {
 }
 
 export class WshimLogger {
-	private request: Request;
-	private env: Bindings;
-
 	private logs: LogEntry[] = [];
-	private serviceToken: string;
 	private sampleRate: number;
-	private fetcher: typeof fetch;
-	private loggingEndpoint: string;
+	private wshimOptions?: WshimOptions;
+	private readonly defaultFields: {
+		'env': string;
+		'http.host': string;
+		'http.user_agent': string | null;
+		'source_service': string;
+	};
 
-	constructor(request: Request, env: Bindings, sampleRate: number = 1) {
-		this.request = request;
-		this.env = env;
+	constructor(request: Request, env: Bindings, logger: Logger, sampleRate: number = 1) {
+		this.wshimOptions = WshimOptions.init(env, logger);
 		if (typeof sampleRate !== 'number' || isNaN(sampleRate) || sampleRate < 0 || sampleRate > 1) {
 			throw new Error('Sample rate must be a number between 0 and 1');
 		}
-
-		this.serviceToken = env.LOGGING_SHIM_TOKEN;
 		this.sampleRate = sampleRate;
-		const socket = env.WSHIM_SOCKET;
-		if (socket && typeof socket.fetch === 'function') {
-			this.fetcher = socket.fetch.bind(socket);
-		} else {
-			this.fetcher = globalThis.fetch.bind(globalThis);
-		}
-		this.loggingEndpoint = `${env.WSHIM_ENDPOINT}/log`;
+		this.defaultFields = {
+			'env': env.ENVIRONMENT,
+			'http.host': request.url,
+			'http.user_agent': request.headers.get('User-Agent'),
+			'source_service': env.SERVICE,
+		};
 	}
 
 	private shouldLog(): boolean {
 		return Math.random() < this.sampleRate;
-	}
-
-	private defaultFields() {
-		return {
-			'env': this.env.ENVIRONMENT,
-			'http.host': this.request.url,
-			'http.user_agent': this.request.headers.get('User-Agent'),
-			'source_service': this.env.SERVICE,
-		};
 	}
 
 	log(...msg: unknown[]): void {
@@ -243,26 +236,28 @@ export class WshimLogger {
 	}
 
 	public async flushLogs(): Promise<void> {
+		if (this.wshimOptions === undefined) {
+			if (this.defaultFields.source_service !== 'unit-tests') {
+				console.log('logs flushing is disabled');
+			}
+			for (const entry of this.logs) {
+				switch (entry.log_level) {
+					case 'error':
+						console.error(entry.error ?? 'unknown error', entry.message);
+						break;
+					default:
+						console.log(entry.message);
+				}
+			}
+			return;
+		}
 		if (this.logs.length === 0) return;
 
-		const defaultFields = this.defaultFields();
-
 		const body = JSON.stringify({
-			logs: this.logs.map(log => ({ message: { ...defaultFields, ...log } })),
+			logs: this.logs.map(log => ({ message: { ...this.defaultFields, ...log } })),
 		});
 
-		try {
-			const response = await this.fetcher(this.loggingEndpoint, {
-				method: 'POST',
-				headers: { Authorization: `Bearer ${this.serviceToken}` },
-				body,
-			});
-			if (!response.ok) {
-				console.error(`Failed to flush logs: ${response.status} ${response.statusText}`);
-			}
-		} catch (error) {
-			console.error('Failed to flush logs:', error);
-		}
+		await this.wshimOptions.flush(body);
 
 		this.logs = [];
 	}
