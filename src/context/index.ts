@@ -58,6 +58,7 @@ export class Context {
 	public bucket: { ISSUANCE_KEYS: CachedR2Bucket };
 	public performance: Performance;
 	public serviceInfo?: ServiceInfo;
+	public key_id?: number; // Used for downstream logging
 
 	constructor(
 		request: Request,

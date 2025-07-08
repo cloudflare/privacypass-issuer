@@ -174,6 +174,7 @@ interface LogEntry {
 	message: string;
 	log_level: string;
 	error?: string;
+	[key: string]: unknown;
 }
 
 export class WshimLogger {
@@ -208,8 +209,24 @@ export class WshimLogger {
 	log(...msg: unknown[]): void {
 		if (!this.shouldLog()) return;
 
-		const message = msg.map(o => (typeof o === 'object' ? JSON.stringify(o) : String(o))).join(' ');
-		const logEntry: LogEntry = { message, log_level: 'info' };
+		let logEntry: LogEntry;
+
+		if (msg.length === 1 && typeof msg[0] === 'object' && msg[0] !== null) {
+			logEntry = {
+				log_level: 'info',
+				...(msg[0] as object),
+			} as LogEntry;
+
+			if (!('message' in logEntry) || typeof logEntry.message !== 'string') {
+				logEntry.message = JSON.stringify(msg[0]);
+			}
+		} else {
+			const message = msg
+				.map(o => (typeof o === 'object' ? JSON.stringify(o) : String(o)))
+				.join(' ');
+			logEntry = { message, log_level: 'info' };
+		}
+
 		this.logs.push(logEntry);
 	}
 
