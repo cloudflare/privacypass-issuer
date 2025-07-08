@@ -58,6 +58,7 @@ export class Context {
 	public bucket: { ISSUANCE_KEYS: CachedR2Bucket };
 	public performance: Performance;
 	public serviceInfo?: ServiceInfo;
+	public key_id?: number; // Used for downstream logging
 
 	constructor(
 		request: Request,
@@ -119,7 +120,7 @@ export class Context {
 		this._waitUntil(p);
 		this.promises.push(
 			p.catch((e: Error) => {
-				this.wshimLogger.error(e.message);
+				this.wshimLogger.error(e);
 			})
 		);
 	}

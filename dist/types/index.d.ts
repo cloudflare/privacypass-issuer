@@ -182,6 +182,7 @@ declare class Context {
 	};
 	performance: Performance;
 	serviceInfo?: ServiceInfo;
+	key_id?: number;
 	constructor(request: Request, env: Bindings, _waitUntil: WaitUntilFunc, logger: Logger, metrics: MetricsRegistry, wshimLogger: WshimLogger, prefix?: string | undefined);
 	/**
 	 *

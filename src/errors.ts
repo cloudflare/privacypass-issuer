@@ -27,10 +27,26 @@ export async function handleError(ctx: Context, error: Error, labels?: Labels) {
 
 	const status = (error as HTTPError).status ?? 500;
 	const message = error.message || 'Server Error';
-	ctx.wshimLogger.log(message);
+
+	const logEntry: Record<string, unknown> = {
+		message,
+		status,
+		prefix: ctx.prefix,
+	};
+
+	if (ctx.key_id) {
+		logEntry.key_id = ctx.key_id;
+	}
+	if (labels?.path) {
+		logEntry.path = labels.path;
+	}
+
+	ctx.wshimLogger.error(logEntry);
+
 	if (shouldSendToSentry(error)) {
 		ctx.logger.captureException(error);
 	}
+
 	return new JSONResponse(
 		{
 			error: { reason: error.name, details: message },

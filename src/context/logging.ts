@@ -174,6 +174,8 @@ interface LogEntry {
 	message: string;
 	log_level: string;
 	error?: string;
+	path?: string;
+	key_id?: string;
 }
 
 export class WshimLogger {
@@ -208,8 +210,35 @@ export class WshimLogger {
 	log(...msg: unknown[]): void {
 		if (!this.shouldLog()) return;
 
-		const message = msg.map(o => (typeof o === 'object' ? JSON.stringify(o) : String(o))).join(' ');
-		const logEntry: LogEntry = { message, log_level: 'info' };
+		let logEntry: LogEntry;
+
+		if (msg.length === 1 && typeof msg[0] === "object" && msg[0] !== null) {
+			const structured = msg[0] as Record<string, unknown>;
+
+			// Use the structured message if available, else stringify the full object
+			const message =
+				typeof structured.message === "string"
+					? structured.message
+					: JSON.stringify(structured);
+
+			// Merge structured fields into the log entry
+			logEntry = {
+				...structured,
+				message,
+				log_level: "info",
+			} as LogEntry;
+		} else {
+			// Fallback for mixed inputs (e.g., strings, objects, numbers)
+			const message = msg
+				.map((o) => (typeof o === "object" ? JSON.stringify(o) : String(o)))
+				.join(" ");
+
+			logEntry = {
+				message,
+				log_level: "info",
+			};
+		}
+
 		this.logs.push(logEntry);
 	}
 
@@ -218,18 +247,32 @@ export class WshimLogger {
 
 		let logEntry: LogEntry;
 
-		if (msg.length === 1 && msg[0] instanceof Error) {
-			const error = msg[0] as Error;
-			logEntry = {
-				message: error.message,
-				log_level: 'error',
-				error: error.stack,
-			};
-		} else {
-			const message = msg
-				.map(o => (typeof o === 'object' ? JSON.stringify(o) : String(o)))
-				.join(' ');
-			logEntry = { message, log_level: 'error' };
+		// Look for an Error object in the input
+		const maybeError = msg.find((m) => m instanceof Error) as Error | undefined;
+
+		// Look for a structured object (non-error) for metadata like key_id, key prefix, etc.
+		const structured =
+			msg.find(
+				(m) => typeof m === "object" && m !== null && !(m instanceof Error),
+			) as Record<string, unknown> | undefined;
+
+		// If no message field exists, fall back to full stringified input
+		const fallbackMessage = msg
+			.map((o) => (typeof o === "object" ? JSON.stringify(o) : String(o)))
+			.join(" ");
+
+		// Choose message in priority order: structured.message → error.message → fallback
+		const message =
+			(structured?.message as string | undefined) ??
+			maybeError?.message ??
+			fallbackMessage;
+
+		// Build error log entry with stack trace if available
+		logEntry = {
+			...(structured ?? {}),
+			message,
+			log_level: "error",
+			error: maybeError?.stack,
 		}
 
 		this.logs.push(logEntry);
