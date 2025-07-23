@@ -46,7 +46,6 @@ export async function handleError(ctx: Context, error: Error, labels?: Labels) {
 	if (shouldSendToSentry(error)) {
 		ctx.logger.captureException(error);
 	}
-
 	return new JSONResponse(
 		{
 			error: { reason: error.name, details: message },

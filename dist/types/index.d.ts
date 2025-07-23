@@ -162,7 +162,7 @@ declare class WshimOptions {
 	readonly token: string;
 	readonly socket: Fetcher;
 	readonly endpoint: string;
-	static init(env: Bindings, logger: Logger): WshimOptions | undefined;
+	static init(env: Bindings, endpoint: "log" | "prometheus", logger: Logger): WshimOptions | undefined;
 	private constructor();
 	flush(body: BodyInit): Promise<void>;
 }

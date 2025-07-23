@@ -145,12 +145,6 @@ export const handleSingleTokenRequest = async (
 	ctx.metrics.signedTokenTotal.inc({ key_id: keyID });
 	ctx.key_id = keyID;
 
-	ctx.wshimLogger.log({
-		message: 'Token issued successfully',
-		key_id: keyID,
-		prefix: ctx.prefix,
-	});
-
 	return {
 		serialized: signedToken.serialize(),
 		status: 200,
@@ -199,12 +193,6 @@ export const handleBatchedTokenRequest = async (
 	);
 	ctx.metrics.signedTokenTotal.add(signedTokenCount, { key_id: keyID });
 	ctx.key_id = keyID;
-
-	ctx.wshimLogger.log({
-		message: 'Batched token issued successfully',
-		key_id: keyID,
-		prefix: ctx.prefix,
-	});
 
 	const responseBytes = batchedTokenResponse.serialize();
 
@@ -342,7 +330,7 @@ export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 			'token-key': (key.customMetadata as StorageMetadata).publicKey,
 			'not-before': Number.parseInt(
 				(key.customMetadata as StorageMetadata).notBefore ??
-				(new Date(key.uploaded).getTime() / 1000).toFixed(0)
+					(new Date(key.uploaded).getTime() / 1000).toFixed(0)
 			),
 		})),
 	};

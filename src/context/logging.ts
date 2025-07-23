@@ -190,7 +190,7 @@ export class WshimLogger {
 	};
 
 	constructor(request: Request, env: Bindings, logger: Logger, sampleRate: number = 1) {
-		this.wshimOptions = WshimOptions.init(env, logger);
+		this.wshimOptions = WshimOptions.init(env, 'log', logger);
 		if (typeof sampleRate !== 'number' || isNaN(sampleRate) || sampleRate < 0 || sampleRate > 1) {
 			throw new Error('Sample rate must be a number between 0 and 1');
 		}
