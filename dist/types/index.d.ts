@@ -162,7 +162,7 @@ declare class WshimOptions {
 	readonly token: string;
 	readonly socket: Fetcher;
 	readonly endpoint: string;
-	static init(env: Bindings, logger: Logger): WshimOptions | undefined;
+	static init(env: Bindings, endpoint: "log" | "prometheus", logger: Logger): WshimOptions | undefined;
 	private constructor();
 	flush(body: BodyInit): Promise<void>;
 }
@@ -182,6 +182,7 @@ declare class Context {
 	};
 	performance: Performance;
 	serviceInfo?: ServiceInfo;
+	key_id?: number;
 	constructor(request: Request, env: Bindings, _waitUntil: WaitUntilFunc, logger: Logger, metrics: MetricsRegistry, wshimLogger: WshimLogger, prefix?: string | undefined);
 	/**
 	 *
