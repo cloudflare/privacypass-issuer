@@ -49,7 +49,7 @@ export class MetricsRegistry {
 			env: env.ENVIRONMENT,
 			service: env.SERVICE,
 		};
-		this.wshimOptions = WshimOptions.init(env, logger);
+		this.wshimOptions = WshimOptions.init(env, 'prometheus', logger);
 
 		this.registry = new Registry();
 

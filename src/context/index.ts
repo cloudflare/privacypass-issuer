@@ -9,9 +9,17 @@ import { MetricsRegistry } from './metrics';
 import { ServiceInfo } from '../types';
 
 export class WshimOptions {
-	public static init(env: Bindings, logger: Logger): WshimOptions | undefined {
-		if (env.LOGGING_SHIM_TOKEN && env.WSHIM_SOCKET && env.WSHIM_ENDPOINT) {
-			return new WshimOptions(env.LOGGING_SHIM_TOKEN, env.WSHIM_SOCKET, env.WSHIM_ENDPOINT);
+	public static init(
+		env: Bindings,
+		endpoint: 'log' | 'prometheus',
+		logger: Logger
+	): WshimOptions | undefined {
+		if (env.LOGGING_SHIM_TOKEN && env.WSHIM_SOCKET) {
+			return new WshimOptions(
+				env.LOGGING_SHIM_TOKEN,
+				env.WSHIM_SOCKET,
+				`https://workers-logging.cfdata.org/${endpoint}`
+			);
 		} else {
 			if (env.LOGGING_SHIM_TOKEN === null && env.ENVIRONMENT !== 'dev') {
 				logger.captureException(new Error('LOGGING_SHIM_TOKEN is undefined'));
@@ -58,6 +66,7 @@ export class Context {
 	public bucket: { ISSUANCE_KEYS: CachedR2Bucket };
 	public performance: Performance;
 	public serviceInfo?: ServiceInfo;
+	public key_id?: number; // Used for downstream logging
 
 	constructor(
 		request: Request,
@@ -119,7 +128,7 @@ export class Context {
 		this._waitUntil(p);
 		this.promises.push(
 			p.catch((e: Error) => {
-				this.wshimLogger.error(e.message);
+				this.wshimLogger.error(e);
 			})
 		);
 	}

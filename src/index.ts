@@ -143,6 +143,7 @@ export const handleSingleTokenRequest = async (
 
 	ctx.metrics.issuanceRequestTotal.inc({ version: ctx.env.VERSION_METADATA.id ?? RELEASE });
 	ctx.metrics.signedTokenTotal.inc({ key_id: keyID });
+	ctx.key_id = keyID;
 
 	return {
 		serialized: signedToken.serialize(),
@@ -191,6 +192,7 @@ export const handleBatchedTokenRequest = async (
 		0
 	);
 	ctx.metrics.signedTokenTotal.add(signedTokenCount, { key_id: keyID });
+	ctx.key_id = keyID;
 
 	const responseBytes = batchedTokenResponse.serialize();
 
