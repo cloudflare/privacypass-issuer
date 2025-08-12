@@ -57,7 +57,6 @@
 		"@cloudflare/privacypass-ts": "0.7.1",
 		"@sentry/cli": "2.26.0",
 		"@sentry/types": "7.95.0",
-		"cron-parser": "4.9.0",
 		"promjs-plus": "0.5.4",
 		"toucan-js": "3.3.1",
 		"typescript": "5.3.3"
