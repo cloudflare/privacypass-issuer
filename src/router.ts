@@ -156,6 +156,8 @@ export class Router {
 		const path = this.normalisePath(rawPath);
 		ctx.metrics.requestsTotal.inc({ path });
 
+		alertOnMTLSExpiration(request, ctx.logger.captureException.bind(ctx.logger));
+
 		let response: Response;
 		try {
 			const handlers = this.handlers[request.method as HttpMethod];
@@ -178,3 +180,23 @@ export class Router {
 		return response;
 	}
 }
+
+const alertOnMTLSExpiration = (request: Request, captureException: (e: Error) => void) => {
+	const now = Date.now();
+	const mTLSAuth = request.cf?.tlsClientAuth as
+		| IncomingRequestCfPropertiesTLSClientAuth
+		| undefined;
+
+	if (!mTLSAuth) return;
+
+	const expirationTime = new Date(mTLSAuth.certNotAfter);
+
+	const ONE_MONTH = 1000 * 60 * 60 * 24 * 31;
+	if (expirationTime.getTime() - now <= ONE_MONTH) {
+		captureException(
+			new Error(
+				`Certificate issued by ${mTLSAuth.certIssuerDN} with fingerprint ${mTLSAuth.certFingerprintSHA1 || mTLSAuth.certFingerprintSHA256} is about to expire: ${mTLSAuth.certNotAfter}`
+			)
+		);
+	}
+};
