@@ -43,7 +43,6 @@ import {
 } from './cache';
 const { BlindRSAMode, Issuer, TokenRequest } = publicVerif;
 const { BatchedTokenRequest, BatchedTokenResponse, Issuer: BatchedTokensIssuer } = arbitraryBatched;
-import { shouldRotateKey } from './utils/keyRotation';
 
 import { shouldClearKey } from './utils/keyRotation';
 import { WorkerEntrypoint } from 'cloudflare:workers';
@@ -563,10 +562,9 @@ export default {
 
 		const checkedEnv = checkMandatoryBindings(env);
 		const context = Router.buildContext(sampleRequest, checkedEnv, ctx);
-		const date = new Date(event.scheduledTime);
 
 		try {
-			if (shouldRotateKey(date, checkedEnv)) {
+			if (event.cron === checkedEnv.ROTATION_CRON_STRING) {
 				await handleRotateKey(context, sampleRequest);
 			} else {
 				await handleClearKey(context, sampleRequest);

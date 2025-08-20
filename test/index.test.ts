@@ -20,7 +20,7 @@ import {
 	TOKEN_TYPES,
 } from '@cloudflare/privacypass-ts';
 import { getDirectoryCache } from '../src/cache';
-import { shouldRotateKey, shouldClearKey } from '../src/utils/keyRotation';
+import { shouldClearKey } from '../src/utils/keyRotation';
 const { TokenRequest, BLIND_RSA } = publicVerif;
 
 const sampleURL = 'http://localhost';
@@ -355,53 +355,6 @@ describe('directory', () => {
 			expect(date.getDay()).toBe(new Date().getDay()); // while this could fail if the test is run when day is passing, this is unlikely and a good enough proxy
 		}
 	});
-});
-
-describe('key rotation', () => {
-	let ctx: Context; // Store context for reuse in tests
-
-	beforeEach(async () => {
-		ctx = getContext({
-			request: new Request(sampleURL),
-			env: env,
-			ectx: new createExecutionContext(),
-		});
-
-		try {
-			const storedKeys = await ctx.bucket.ISSUANCE_KEYS.list();
-			for (const key of storedKeys.objects) {
-				await ctx.bucket.ISSUANCE_KEYS.delete(key.key);
-			}
-		} catch (error) {
-			console.error('[Test] Failed to clear storage:', error);
-		}
-	});
-
-	it.each`
-		name                                                        | rotationCron     | date                          | expected
-		${'rotate key at every minute'}                             | ${'* * * * *'}   | ${'2023-08-01T00:01:00Z'}     | ${true}
-		${'rotate key at midnight on the first day of every month'} | ${'0 0 1 * *'}   | ${'2023-09-01T00:00:00Z'}     | ${true}
-		${'rotate key at 12:30 PM every day'}                       | ${'30 12 * * *'} | ${'2023-08-01T12:30:00Z'}     | ${true}
-		${'not rotate key at noon on a non-rotation day'}           | ${'0 0 1 * *'}   | ${'2023-08-02T12:00:00Z'}     | ${false}
-		${'rotate key at 11:59 PM on the last day of the month'}    | ${'59 23 * * *'} | ${'2023-08-31T23:59:00Z'}     | ${true}
-		${'handle rotation with millisecond precision'}             | ${'* * * * *'}   | ${'2023-08-01T00:01:00.010Z'} | ${true}
-	`(
-		'should $name',
-		async ({
-			rotationCron,
-			date,
-			expected,
-		}: {
-			rotationCron: string;
-			date: string;
-			expected: boolean;
-		}) => {
-			// Use the context created in beforeEach
-			ctx.env.ROTATION_CRON_STRING = rotationCron;
-
-			expect(shouldRotateKey(new Date(date), ctx.env)).toBe(expected);
-		}
-	);
 });
 
 describe('shouldClearKey Function', () => {
