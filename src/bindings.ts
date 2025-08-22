@@ -32,6 +32,11 @@ export interface Bindings {
 	LOGGING_SHIM_TOKEN: string | null;
 	WSHIM_SOCKET: Fetcher | null;
 	WSHIM_ENDPOINT: string | null;
+
+	// backups
+	BACKUPS_CRON_STRING: string | null;
+	BACKUPS_SERVICE_ACCOUNT_KEY: string | null;
+	BACKUPS_BUCKET_NAME: string | null;
 }
 
 export const DEFAULT_MINIMUM_FRESHEST_KEYS = '2';
@@ -87,5 +92,8 @@ export function checkMandatoryBindings(env: UncheckedBindings): Bindings {
 		LOGGING_SHIM_TOKEN: env.LOGGING_SHIM_TOKEN ?? null,
 		WSHIM_SOCKET: env.WSHIM_SOCKET ?? null,
 		WSHIM_ENDPOINT: env.WSHIM_ENDPOINT ?? null,
+		BACKUPS_CRON_STRING: env.BACKUPS_CRON_STRING ?? null,
+		BACKUPS_SERVICE_ACCOUNT_KEY: env.BACKUPS_SERVICE_ACCOUNT_KEY ?? null,
+		BACKUPS_BUCKET_NAME: env.BACKUPS_BUCKET_NAME ?? null,
 	};
 }

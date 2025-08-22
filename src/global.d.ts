@@ -39,6 +39,10 @@ declare global {
 	interface RsaHashedImportParams extends Algorithm {
 		hash: HashAlgorithmIdentifier;
 	}
+
+	interface Array<T> {
+		filterMap<R>(f: (t: T) => R | null): R[];
+	}
 }
 
 export {};

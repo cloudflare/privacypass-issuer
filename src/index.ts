@@ -48,6 +48,7 @@ import { shouldClearKey } from './utils/keyRotation';
 import { WorkerEntrypoint } from 'cloudflare:workers';
 
 import { BaseRpcOptions, IssueOptions } from './types';
+import { keyBackup } from './key-backup';
 
 export {
 	InvalidTokenTypeError,
@@ -55,6 +56,16 @@ export {
 	BadTokenKeyRequestedError,
 	MismatchedTokenKeyIDError,
 } from './errors';
+
+if (!Array.prototype.filterMap) {
+	Array.prototype.filterMap = function <T, R>(f: (t: T) => R | null): R[] {
+		return (this as Array<T>).reduce((list, t) => {
+			const r = f(t);
+			if (r !== null) list.push(r);
+			return list;
+		}, [] as R[]);
+	};
+}
 
 const keyToTokenKeyID = async (key: Uint8Array): Promise<number> => {
 	const hash = await crypto.subtle.digest('SHA-256', key);
@@ -566,6 +577,8 @@ export default {
 		try {
 			if (event.cron === checkedEnv.ROTATION_CRON_STRING) {
 				await handleRotateKey(context, sampleRequest);
+			} else if (event.cron === checkedEnv.BACKUPS_CRON_STRING) {
+				await keyBackup(context);
 			} else {
 				await handleClearKey(context, sampleRequest);
 			}
