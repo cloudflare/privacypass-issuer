@@ -41,6 +41,7 @@ export class MetricsRegistry {
 	defaultLabels: {
 		env: string;
 		service: string;
+		version: string;
 	};
 	wshimOptions?: WshimOptions;
 
@@ -48,6 +49,7 @@ export class MetricsRegistry {
 		this.defaultLabels = {
 			env: env.ENVIRONMENT,
 			service: env.SERVICE,
+			version: env.VERSION_METADATA.id ?? RELEASE,
 		};
 		this.wshimOptions = WshimOptions.init(env, 'prometheus', logger);
 

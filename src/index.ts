@@ -151,7 +151,7 @@ export const handleSingleTokenRequest = async (
 	const issuer = new Issuer(BlindRSAMode.PSS, domain, sk, pk, { supportsRSARAW: true });
 	const signedToken = await issuer.issue(tokenRequest);
 
-	ctx.metrics.issuanceRequestTotal.inc({ version: ctx.env.VERSION_METADATA.id ?? RELEASE });
+	ctx.metrics.issuanceRequestTotal.inc();
 	ctx.metrics.signedTokenTotal.inc({ key_id: keyID });
 	ctx.key_id = keyID;
 
@@ -196,7 +196,7 @@ export const handleBatchedTokenRequest = async (
 	const batchedTokenIssuer = new BatchedTokensIssuer(issuer);
 	const batchedTokenResponse = await batchedTokenIssuer.issue(batchedTokenRequest);
 
-	ctx.metrics.issuanceRequestTotal.inc({ version: ctx.env.VERSION_METADATA.id ?? RELEASE });
+	ctx.metrics.issuanceRequestTotal.inc();
 	const signedTokenCount = batchedTokenResponse.tokenResponses.reduce(
 		(c, t) => c + (t.tokenResponse !== null ? 1 : 0),
 		0

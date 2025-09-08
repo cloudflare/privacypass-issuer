@@ -22,7 +22,6 @@ export async function handleError(ctx: Context, error: Error, labels?: Labels) {
 
 	ctx.metrics.erroredRequestsTotal.inc({
 		...labels,
-		version: ctx.env.VERSION_METADATA.id ?? RELEASE,
 	});
 
 	const status = (error as HTTPError).status ?? 500;
