@@ -35,11 +35,8 @@ export class FlexibleLogger implements Logger {
 	logger: Logger;
 	constructor(environment: string, options?: SentryOptions) {
 		if (options === undefined) {
-			if (environment === 'dev') {
-				console.log('sentry is disabled');
-				this.logger = new ConsoleLogger();
-			}
-			throw new Error('Not all sentry options were defined');
+			// console.log('sentry is disabled');
+			this.logger = new ConsoleLogger();
 		} else {
 			this.logger = new SentryLogger(environment, options);
 		}
