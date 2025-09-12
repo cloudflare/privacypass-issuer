@@ -38,6 +38,7 @@ export class MetricsRegistry {
 	requestsTotal: CounterType;
 	r2RequestsDurationMs: HistogramType;
 	signedTokenTotal: CounterType;
+	cacheRefreshed: CounterType;
 	defaultLabels: {
 		env: string;
 		service: string;
@@ -107,6 +108,11 @@ export class MetricsRegistry {
 			'counter',
 			'signed_token_total',
 			'Number of issued signed private tokens.'
+		);
+		this.cacheRefreshed = this.create(
+			'counter',
+			'cache_refreshed',
+			'Number of times the cache has been deemed stale and was refreshed'
 		);
 	}
 

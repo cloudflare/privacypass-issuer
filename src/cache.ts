@@ -129,7 +129,7 @@ export class InMemoryCryptoKeyCache {
 				(() => {
 					const expiration = new Date(cachedValue.expiration.getTime());
 					if (shouldRevalidate(expiration)) {
-						this.ctx.wshimLogger.log('InMemoryCache is stale. Revalidating with waitUntil.');
+						this.ctx.metrics.cacheRefreshed.inc({ cache: 'InMemoryCryptoKeyCache' });
 						return refreshCache();
 					}
 					return Promise.resolve();
@@ -164,7 +164,7 @@ export class InMemoryCache implements ReadableCache {
 				(() => {
 					const expiration = new Date(cachedValue.expiration.getTime());
 					if (shouldRevalidate(expiration)) {
-						this.ctx.wshimLogger.log('InMemoryCache is stale. Revalidating with waitUntil.');
+						this.ctx.metrics.cacheRefreshed.inc({ cache: 'InMemoryCache' });
 						return refreshCache();
 					}
 					return Promise.resolve();
@@ -215,7 +215,7 @@ export class APICache implements ReadableCache {
 						expirationWithRevalidate.getTime() - STALE_WHILE_REVALIDATE_IN_MS
 					);
 					if (shouldRevalidate(expiration)) {
-						this.ctx.wshimLogger.log('APICache is stale. Revalidating with waitUntil.');
+						this.ctx.metrics.cacheRefreshed.inc({ cache: 'APICache', cacheKey: this.cacheKey });
 						return refreshCache();
 					}
 					return Promise.resolve();
