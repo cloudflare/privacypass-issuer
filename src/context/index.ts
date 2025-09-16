@@ -67,6 +67,9 @@ export class Context {
 	public performance: Performance;
 	public serviceInfo?: ServiceInfo;
 	public key_id?: number; // Used for downstream logging
+	public cacheSettings?: {
+		maxAgeSeconds: number;
+	};
 
 	constructor(
 		request: Request,
@@ -79,7 +82,19 @@ export class Context {
 	) {
 		// eslint-disable-next-line @typescript-eslint/no-this-alias
 		const ctx = this;
-		const cache = new CascadingCache(new InMemoryCache(ctx), new APICache(ctx, 'r2/issuance_keys'));
+
+		const buildCacheSettings = () => {
+			if (env.DIRECTORY_CACHE_MAX_AGE_SECONDS === null) {
+				throw new Error('DIRECTORY_CACHE_MAX_AGE_SECONDS is undefined');
+			}
+			return {
+				maxAgeSeconds: Number.parseInt(env.DIRECTORY_CACHE_MAX_AGE_SECONDS),
+			};
+		};
+		this.cacheSettings = env.USE_CACHE_API === 'true' ? buildCacheSettings() : undefined;
+		const cache = this.cacheSettings
+			? new CascadingCache(new InMemoryCache(ctx), new APICache(ctx, 'r2/issuance_keys'))
+			: new InMemoryCache(ctx);
 		const cachedR2Bucket = new CachedR2Bucket(ctx, env.ISSUANCE_KEYS, cache, prefix);
 
 		const cachedR2BucketWithRetries = new Proxy(cachedR2Bucket, {

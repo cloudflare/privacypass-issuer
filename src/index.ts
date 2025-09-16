@@ -300,24 +300,27 @@ export const handleHeadTokenDirectory = async (ctx: Context, request: Request) =
 };
 
 export const handleTokenDirectory = async (ctx: Context, request: Request) => {
-	const cache = await getDirectoryCache();
-	let cachedResponse: Response | undefined;
-	try {
-		cachedResponse = await cache.match(DIRECTORY_CACHE_REQUEST(ctx.hostname, ctx.prefix));
-	} catch (e: unknown) {
-		const err = e as Error;
-		throw new InternalCacheError(err.message);
-	}
-	if (cachedResponse) {
-		if (request.headers.get('if-none-match') === cachedResponse.headers.get('etag')) {
-			return new Response(undefined, {
-				status: 304,
-				headers: cachedResponse.headers,
-			});
+	let cache: Cache | undefined;
+	if (ctx.cacheSettings) {
+		cache = await getDirectoryCache();
+		let cachedResponse: Response | undefined;
+		try {
+			cachedResponse = await cache.match(DIRECTORY_CACHE_REQUEST(ctx.hostname, ctx.prefix));
+		} catch (e: unknown) {
+			const err = e as Error;
+			throw new InternalCacheError(err.message);
 		}
-		return cachedResponse;
+		if (cachedResponse) {
+			if (request.headers.get('if-none-match') === cachedResponse.headers.get('etag')) {
+				return new Response(undefined, {
+					status: 304,
+					headers: cachedResponse.headers,
+				});
+			}
+			return cachedResponse;
+		}
+		ctx.metrics.directoryCacheMissTotal.inc();
 	}
-	ctx.metrics.directoryCacheMissTotal.inc();
 
 	const keyList = await ctx.bucket.ISSUANCE_KEYS.list({ include: ['customMetadata'] });
 
@@ -346,27 +349,37 @@ export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 	};
 
 	const body = JSON.stringify(directory);
-	const digest = new Uint8Array(
-		await crypto.subtle.digest('SHA-256', new TextEncoder().encode(body))
-	);
-	const etag = `"${hexEncode(digest)}"`;
+
+	const baseHeaders = {
+		'content-type': MediaType.PRIVATE_TOKEN_ISSUER_DIRECTORY,
+		'content-length': body.length.toString(),
+	};
+	const cacheHeaders: Record<string, string> = ctx.cacheSettings
+		? {
+				'cache-control': `public, max-age=${ctx.cacheSettings.maxAgeSeconds}`,
+				'date': new Date().toUTCString(),
+				'etag': `"${hexEncode(
+					new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(body)))
+				)}"`,
+			}
+		: {};
 
 	const response = new Response(body, {
 		headers: {
-			'content-type': MediaType.PRIVATE_TOKEN_ISSUER_DIRECTORY,
-			'cache-control': `public, max-age=${ctx.env.DIRECTORY_CACHE_MAX_AGE_SECONDS}`,
-			'content-length': body.length.toString(),
-			'date': new Date().toUTCString(),
-			etag,
+			...baseHeaders,
+			...cacheHeaders,
 		},
 	});
-	const toCacheResponse = response.clone();
-	// directory cache time within worker should be between 70% and 100% of browser cache time
-	const cacheTime = Math.floor(
-		Number.parseInt(ctx.env.DIRECTORY_CACHE_MAX_AGE_SECONDS) * (0.7 + 0.3 * Math.random())
-	).toFixed(0);
-	toCacheResponse.headers.set('cache-control', `public, max-age=${cacheTime}`);
-	ctx.waitUntil(cache.put(DIRECTORY_CACHE_REQUEST(ctx.hostname, ctx.prefix), toCacheResponse));
+
+	if (ctx.cacheSettings) {
+		const toCacheResponse = response.clone();
+		// directory cache time within worker should be between 70% and 100% of browser cache time
+		const cacheTime = Math.floor(
+			ctx.cacheSettings.maxAgeSeconds * (0.7 + 0.3 * Math.random())
+		).toFixed(0);
+		toCacheResponse.headers.set('cache-control', `public, max-age=${cacheTime}`);
+		ctx.waitUntil(cache!.put(DIRECTORY_CACHE_REQUEST(ctx.hostname, ctx.prefix), toCacheResponse));
+	}
 
 	return response;
 };
@@ -412,7 +425,9 @@ const rotateKey = async (ctx: Context): Promise<Uint8Array> => {
 		customMetadata: metadata,
 	});
 
-	ctx.waitUntil(clearDirectoryCache(ctx));
+	if (ctx.cacheSettings) {
+		ctx.waitUntil(clearDirectoryCache(ctx));
+	}
 
 	ctx.wshimLogger.log(`Key rotated successfully, new key ${tokenKeyID}`);
 
@@ -468,7 +483,9 @@ const clearKey = async (ctx: Context): Promise<string[]> => {
 
 	if (toDeleteArray.length > 0) {
 		await ctx.bucket.ISSUANCE_KEYS.delete(toDeleteArray);
-		ctx.waitUntil(clearDirectoryCache(ctx));
+		if (ctx.cacheSettings) {
+			ctx.waitUntil(clearDirectoryCache(ctx));
+		}
 	}
 	ctx.wshimLogger.log(
 		toDeleteArray.length > 0
