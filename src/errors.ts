@@ -18,11 +18,8 @@ function shouldSendToSentry(error: Error): boolean {
 }
 
 export async function handleError(ctx: Context, error: Error, labels?: Labels) {
-	console.error(error.stack);
-
 	ctx.metrics.erroredRequestsTotal.inc({
 		...labels,
-		version: ctx.env.VERSION_METADATA.id ?? RELEASE,
 	});
 
 	const status = (error as HTTPError).status ?? 500;
@@ -41,7 +38,9 @@ export async function handleError(ctx: Context, error: Error, labels?: Labels) {
 		logEntry.path = labels.path;
 	}
 
-	ctx.wshimLogger.error(logEntry);
+	if (status === 500) {
+		ctx.wshimLogger.error(logEntry);
+	}
 
 	if (shouldSendToSentry(error)) {
 		ctx.logger.captureException(error);

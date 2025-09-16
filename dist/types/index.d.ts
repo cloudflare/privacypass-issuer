@@ -30,6 +30,9 @@ declare global {
 	interface RsaHashedImportParams extends Algorithm {
 		hash: HashAlgorithmIdentifier;
 	}
+	interface Array<T> {
+		filterMap<R>(f: (t: T) => R | null): R[];
+	}
 }
 export interface Bindings {
 	DIRECTORY_CACHE_MAX_AGE_SECONDS: string;
@@ -49,6 +52,9 @@ export interface Bindings {
 	LOGGING_SHIM_TOKEN: string | null;
 	WSHIM_SOCKET: Fetcher | null;
 	WSHIM_ENDPOINT: string | null;
+	BACKUPS_CRON_STRING: string | null;
+	BACKUPS_SERVICE_ACCOUNT_KEY: string | null;
+	BACKUPS_BUCKET_NAME: string | null;
 }
 export type NonNullableFields<T> = {
 	[P in keyof T]: T[P] extends infer U | null ? U : T[P];

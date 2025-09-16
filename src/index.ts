@@ -43,12 +43,12 @@ import {
 } from './cache';
 const { BlindRSAMode, Issuer, TokenRequest } = publicVerif;
 const { BatchedTokenRequest, BatchedTokenResponse, Issuer: BatchedTokensIssuer } = arbitraryBatched;
-import { shouldRotateKey } from './utils/keyRotation';
 
 import { shouldClearKey } from './utils/keyRotation';
 import { WorkerEntrypoint } from 'cloudflare:workers';
 
 import { BaseRpcOptions, IssueOptions } from './types';
+import { keyBackup } from './key-backup';
 
 export {
 	InvalidTokenTypeError,
@@ -56,6 +56,16 @@ export {
 	BadTokenKeyRequestedError,
 	MismatchedTokenKeyIDError,
 } from './errors';
+
+if (!Array.prototype.filterMap) {
+	Array.prototype.filterMap = function <T, R>(f: (t: T) => R | null): R[] {
+		return (this as Array<T>).reduce((list, t) => {
+			const r = f(t);
+			if (r !== null) list.push(r);
+			return list;
+		}, [] as R[]);
+	};
+}
 
 const keyToTokenKeyID = async (key: Uint8Array): Promise<number> => {
 	const hash = await crypto.subtle.digest('SHA-256', key);
@@ -141,7 +151,7 @@ export const handleSingleTokenRequest = async (
 	const issuer = new Issuer(BlindRSAMode.PSS, domain, sk, pk, { supportsRSARAW: true });
 	const signedToken = await issuer.issue(tokenRequest);
 
-	ctx.metrics.issuanceRequestTotal.inc({ version: ctx.env.VERSION_METADATA.id ?? RELEASE });
+	ctx.metrics.issuanceRequestTotal.inc();
 	ctx.metrics.signedTokenTotal.inc({ key_id: keyID });
 	ctx.key_id = keyID;
 
@@ -186,7 +196,7 @@ export const handleBatchedTokenRequest = async (
 	const batchedTokenIssuer = new BatchedTokensIssuer(issuer);
 	const batchedTokenResponse = await batchedTokenIssuer.issue(batchedTokenRequest);
 
-	ctx.metrics.issuanceRequestTotal.inc({ version: ctx.env.VERSION_METADATA.id ?? RELEASE });
+	ctx.metrics.issuanceRequestTotal.inc();
 	const signedTokenCount = batchedTokenResponse.tokenResponses.reduce(
 		(c, t) => c + (t.tokenResponse !== null ? 1 : 0),
 		0
@@ -563,11 +573,12 @@ export default {
 
 		const checkedEnv = checkMandatoryBindings(env);
 		const context = Router.buildContext(sampleRequest, checkedEnv, ctx);
-		const date = new Date(event.scheduledTime);
 
 		try {
-			if (shouldRotateKey(date, checkedEnv)) {
+			if (event.cron === checkedEnv.ROTATION_CRON_STRING) {
 				await handleRotateKey(context, sampleRequest);
+			} else if (event.cron === checkedEnv.BACKUPS_CRON_STRING) {
+				await keyBackup(context);
 			} else {
 				await handleClearKey(context, sampleRequest);
 			}
