@@ -136,9 +136,11 @@ declare class MetricsRegistry {
 	requestsTotal: CounterType;
 	r2RequestsDurationMs: HistogramType;
 	signedTokenTotal: CounterType;
+	cacheRefreshed: CounterType;
 	defaultLabels: {
 		env: string;
 		service: string;
+		version: string;
 	};
 	wshimOptions?: WshimOptions;
 	constructor(env: Bindings, logger: Logger);
