@@ -58,6 +58,8 @@ export class WshimOptions {
 	}
 }
 
+const DEFAULT_DIRECTORY_CACHE_MAX_AGE_SECONDS = 5 * 60;
+
 export type WaitUntilFunc = (p: Promise<unknown>) => void;
 export class Context {
 	public hostname: string;
@@ -84,11 +86,11 @@ export class Context {
 		const ctx = this;
 
 		const buildCacheSettings = () => {
-			if (env.DIRECTORY_CACHE_MAX_AGE_SECONDS === null) {
-				throw new Error('DIRECTORY_CACHE_MAX_AGE_SECONDS is undefined');
-			}
 			return {
-				maxAgeSeconds: Number.parseInt(env.DIRECTORY_CACHE_MAX_AGE_SECONDS),
+				maxAgeSeconds:
+					env.DIRECTORY_CACHE_MAX_AGE_SECONDS === null
+						? DEFAULT_DIRECTORY_CACHE_MAX_AGE_SECONDS
+						: Number.parseInt(env.DIRECTORY_CACHE_MAX_AGE_SECONDS),
 			};
 		};
 		this.cacheSettings = env.USE_CACHE_API === 'true' ? buildCacheSettings() : undefined;
