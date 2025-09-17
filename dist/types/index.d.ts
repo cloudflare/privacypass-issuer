@@ -35,7 +35,8 @@ declare global {
 	}
 }
 export interface Bindings {
-	DIRECTORY_CACHE_MAX_AGE_SECONDS: string;
+	DIRECTORY_CACHE_MAX_AGE_SECONDS: string | null;
+	USE_CACHE_API: string | null;
 	ENVIRONMENT: string;
 	SERVICE: string;
 	SENTRY_ACCESS_CLIENT_ID: string | null;
@@ -136,9 +137,11 @@ declare class MetricsRegistry {
 	requestsTotal: CounterType;
 	r2RequestsDurationMs: HistogramType;
 	signedTokenTotal: CounterType;
+	cacheRefreshed: CounterType;
 	defaultLabels: {
 		env: string;
 		service: string;
+		version: string;
 	};
 	wshimOptions?: WshimOptions;
 	constructor(env: Bindings, logger: Logger);
@@ -189,6 +192,9 @@ declare class Context {
 	performance: Performance;
 	serviceInfo?: ServiceInfo;
 	key_id?: number;
+	cacheSettings?: {
+		maxAgeSeconds: number;
+	};
 	constructor(request: Request, env: Bindings, _waitUntil: WaitUntilFunc, logger: Logger, metrics: MetricsRegistry, wshimLogger: WshimLogger, prefix?: string | undefined);
 	/**
 	 *
