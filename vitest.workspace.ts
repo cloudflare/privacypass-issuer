@@ -33,6 +33,7 @@ export default defineWorkspace([
 							SERVICE: "unit-tests",
 							KEY_NOT_BEFORE_DELAY_IN_MS: "0",
 							DIRECTORY_CACHE_MAX_AGE_SECONDS: "0",
+							USE_CACHE_API: "true",
 							KEY_LIFESPAN_IN_MS: "0",
 						},
 					},

@@ -5,7 +5,8 @@ import type { R2Bucket, Performance } from '@cloudflare/workers-types/2023-07-01
 
 export interface Bindings {
 	// variables and secrets
-	DIRECTORY_CACHE_MAX_AGE_SECONDS: string;
+	DIRECTORY_CACHE_MAX_AGE_SECONDS: string | null;
+	USE_CACHE_API: string | null;
 	ENVIRONMENT: string;
 	SERVICE: string;
 	SENTRY_ACCESS_CLIENT_ID: string | null;
@@ -66,8 +67,6 @@ export type UncheckedBindings = Partial<NonNullableFields<Bindings>>;
 export function checkMandatoryBindings(env: UncheckedBindings): Bindings {
 	if (env.ENVIRONMENT === undefined) throw new Error('ENVIRONMENT is undefined');
 	if (env.SERVICE === undefined) throw new Error('SERVICE is undefined');
-	if (env.DIRECTORY_CACHE_MAX_AGE_SECONDS === undefined)
-		throw new Error('DIRECTORY_CACHE_MAX_AGE_SECONDS is undefined');
 	if (env.ISSUANCE_KEYS === undefined) throw new Error('ISSUANCE_KEYS is undefined');
 	if (env.VERSION_METADATA === undefined) throw new Error('VERSION_METADATA is undefined');
 	if (env.KEY_LIFESPAN_IN_MS === undefined) throw new Error('KEY_LIFESPAN_IN_MS is undefined');
@@ -75,7 +74,8 @@ export function checkMandatoryBindings(env: UncheckedBindings): Bindings {
 		throw new Error('KEY_NOT_BEFORE_DELAY_IN_MS is undefined');
 
 	return {
-		DIRECTORY_CACHE_MAX_AGE_SECONDS: env.DIRECTORY_CACHE_MAX_AGE_SECONDS,
+		DIRECTORY_CACHE_MAX_AGE_SECONDS: env.DIRECTORY_CACHE_MAX_AGE_SECONDS ?? null,
+		USE_CACHE_API: env.USE_CACHE_API ?? null,
 		ENVIRONMENT: env.ENVIRONMENT,
 		SERVICE: env.SERVICE,
 		SENTRY_ACCESS_CLIENT_ID: env.SENTRY_ACCESS_CLIENT_ID ?? null,
