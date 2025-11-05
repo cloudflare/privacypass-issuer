@@ -2,7 +2,7 @@
 
 import { Performance as Performance$1, R2Bucket as R2Bucket$1, R2HTTPMetadata as R2HTTPMetadata$1, R2ListOptions as R2ListOptions$1 } from '@cloudflare/workers-types/2023-07-01';
 import { Breadcrumb } from '@sentry/types';
-import { WorkerEntrypoint } from 'cloudflare:workers';
+import { WorkerEntrypoint, WorkflowEntrypoint, WorkflowEvent, WorkflowStep } from 'cloudflare:workers';
 import { CounterType, HistogramType, RegistryType } from 'promjs-plus';
 
 // Copyright (c) 2023 Cloudflare, Inc.
@@ -56,6 +56,7 @@ export interface Bindings {
 	BACKUPS_CRON_STRING: string | null;
 	BACKUPS_SERVICE_ACCOUNT_KEY: string | null;
 	BACKUPS_BUCKET_NAME: string | null;
+	KEY_BACKUP_WF: Workflow;
 }
 export type NonNullableFields<T> = {
 	[P in keyof T]: T[P] extends infer U | null ? U : T[P];
@@ -214,6 +215,9 @@ declare class Context {
 	 * It is important to wait for the promises in the array to complete sequentially since new promises created by async tasks may be added to the end of the array while this function runs.
 	 */
 	waitForPromises(): Promise<void>;
+}
+export declare class KeyBackupWorkflow extends WorkflowEntrypoint<UncheckedBindings> {
+	run(_event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void>;
 }
 declare class HTTPError extends Error {
 	status: number;

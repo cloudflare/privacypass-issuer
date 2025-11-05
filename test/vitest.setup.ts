@@ -18,5 +18,8 @@ vi.mock('cloudflare:workers', () => {
 				public env?: any
 			) {}
 		},
+		WorkflowEntrypoint: class WorkflowEntrypoint {
+			constructor() {}
+		},
 	};
 });
