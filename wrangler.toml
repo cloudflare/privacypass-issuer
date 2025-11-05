@@ -30,3 +30,8 @@ binding = 'ISSUANCE_KEYS'
 
 [env.production.version_metadata]
 binding = "VERSION_METADATA"
+
+[[env.production.workflows]]
+name = "key-backup-workflow"
+binding = "KEY_BACKUP_WF"
+class_name = "KeyBackupWorkflow"

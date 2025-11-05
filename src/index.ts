@@ -48,8 +48,8 @@ import { shouldClearKey } from './utils/keyRotation';
 import { WorkerEntrypoint } from 'cloudflare:workers';
 
 import { BaseRpcOptions, IssueOptions } from './types';
-import { keyBackup } from './key-backup';
 
+export { KeyBackupWorkflow } from './key-backup';
 export {
 	InvalidTokenTypeError,
 	InvalidBatchedTokenTypeError,
@@ -595,7 +595,7 @@ export default {
 			if (event.cron === checkedEnv.ROTATION_CRON_STRING) {
 				await handleRotateKey(context, sampleRequest);
 			} else if (event.cron === checkedEnv.BACKUPS_CRON_STRING) {
-				await keyBackup(context);
+				await env.KEY_BACKUP_WF?.create();
 			} else {
 				await handleClearKey(context, sampleRequest);
 			}
