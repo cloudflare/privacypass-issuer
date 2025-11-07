@@ -134,6 +134,8 @@ const backupKeys = async (
 				if (!uploadResponse.ok) {
 					const errorText = await uploadResponse.text();
 					throw new Error(`GCS Upload Error: ${errorText}`);
+				} else {
+					await uploadResponse.body?.cancel();
 				}
 			} catch (e) {
 				throw new Error(`Error handling upload: ${e}`);
