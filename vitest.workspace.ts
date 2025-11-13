@@ -35,6 +35,7 @@ export default defineWorkspace([
 							DIRECTORY_CACHE_MAX_AGE_SECONDS: "0",
 							USE_CACHE_API: "true",
 							KEY_LIFESPAN_IN_MS: "0",
+							KEY_BACKUP_WF: {},
 						},
 					},
 				},

@@ -1,9 +1,10 @@
 import JWT from '@tsndr/cloudflare-worker-jwt';
-import { Bindings } from './bindings';
+import { Bindings, UncheckedBindings, checkMandatoryBindings } from './bindings';
 import { u8ToB64 } from './utils/base64';
 import { R2Bucket } from '@cloudflare/workers-types/2023-07-01';
-import { Context } from './context';
 import { WshimLogger } from './context/logging';
+import { WorkflowEntrypoint, WorkflowEvent, WorkflowStep } from 'cloudflare:workers';
+import { Router } from './router';
 
 type ServiceAccountKey = {
 	type: string;
@@ -59,8 +60,7 @@ const getGoogleAccessToken = async (
 			);
 		}
 
-		const data: { access_token: string; expires_in: number } = await response.json();
-
+		const data: { access_token: string } = await response.json();
 		return data.access_token;
 	} catch (e) {
 		logger.error('Error during Google Access Token generation:', e);
@@ -78,7 +78,12 @@ type Required<T> = { [K in keyof T]: NonNullable<T[K]> };
 
 type BackupEnv = Required<Pick<Bindings, 'BACKUPS_SERVICE_ACCOUNT_KEY' | 'BACKUPS_BUCKET_NAME'>>;
 
-const backupKeys = async (logger: WshimLogger, env: BackupEnv, keys: Key[]): Promise<void> => {
+const backupKeys = async (
+	logger: WshimLogger,
+	env: BackupEnv,
+	keys: Key[],
+	step: WorkflowStep
+): Promise<void> => {
 	const gcsUploadUrl = `https://storage.googleapis.com/upload/storage/v1/b/${env.BACKUPS_BUCKET_NAME}/o?uploadType=multipart`;
 	const boundary = 'metadata-boundary';
 
@@ -87,7 +92,10 @@ const backupKeys = async (logger: WshimLogger, env: BackupEnv, keys: Key[]): Pro
 		return `${now.getUTCFullYear()}-${now.getUTCMonth()}-${now.getUTCDate()}`;
 	})();
 
-	const accessToken = await getGoogleAccessToken(logger, env.BACKUPS_SERVICE_ACCOUNT_KEY);
+	const accessToken = await step.do(
+		'get-google-access-token',
+		async () => await getGoogleAccessToken(logger, env.BACKUPS_SERVICE_ACCOUNT_KEY)
+	);
 	for (const { id, privateKey, metadata } of keys) {
 		const objectName = `${objectNamePrefix}-id:${id}`;
 		const objMetadata = {
@@ -119,17 +127,20 @@ const backupKeys = async (logger: WshimLogger, env: BackupEnv, keys: Key[]): Pro
 				'',
 			].join('\r\n'),
 		};
-		try {
-			const uploadResponse = await fetch(gcsUploadUrl, post);
+		await step.do(`backup-${id}`, async () => {
+			try {
+				const uploadResponse = await fetch(gcsUploadUrl, post);
 
-			if (!uploadResponse.ok) {
-				const errorText = await uploadResponse.text();
-				logger.error('GCS Upload Error:', errorText);
-				return;
+				if (!uploadResponse.ok) {
+					const errorText = await uploadResponse.text();
+					throw new Error(`GCS Upload Error: ${errorText}`);
+				} else {
+					await uploadResponse.body?.cancel();
+				}
+			} catch (e) {
+				throw new Error(`Error handling upload: ${e}`);
 			}
-		} catch (e) {
-			logger.error('Error handling upload:', e);
-		}
+		});
 	}
 };
 
@@ -158,17 +169,28 @@ const readKeys = async (logger: WshimLogger, r2: R2Bucket): Promise<Key[]> => {
 	});
 };
 
-export const keyBackup = async (ctx: Context) => {
-	// have to put these in variables otherwise typescript can't narrow the type to remove the `|null`
-	const { BACKUPS_BUCKET_NAME, BACKUPS_SERVICE_ACCOUNT_KEY } = ctx.env;
+export class KeyBackupWorkflow extends WorkflowEntrypoint<UncheckedBindings> {
+	async run(_event: WorkflowEvent<unknown>, step: WorkflowStep) {
+		const sampleRequest = new Request(`https://schedule.example.com`);
 
-	if (BACKUPS_BUCKET_NAME === null || BACKUPS_SERVICE_ACCOUNT_KEY === null) {
-		throw new Error('backup variables not configured');
+		const checkedEnv = checkMandatoryBindings(this.env);
+		const ctx = Router.buildContext(sampleRequest, checkedEnv, this.ctx);
+
+		// have to put these in variables otherwise typescript can't narrow the type to remove the `|null`
+		const { BACKUPS_BUCKET_NAME, BACKUPS_SERVICE_ACCOUNT_KEY } = ctx.env;
+
+		if (BACKUPS_BUCKET_NAME === null || BACKUPS_SERVICE_ACCOUNT_KEY === null) {
+			throw new Error('backup variables not configured');
+		}
+
+		await backupKeys(
+			ctx.wshimLogger,
+			{ BACKUPS_SERVICE_ACCOUNT_KEY, BACKUPS_BUCKET_NAME },
+			await step.do(
+				'read-keys',
+				async () => await readKeys(ctx.wshimLogger, ctx.env.ISSUANCE_KEYS)
+			),
+			step
+		);
 	}
-
-	await backupKeys(
-		ctx.wshimLogger,
-		{ BACKUPS_SERVICE_ACCOUNT_KEY, BACKUPS_BUCKET_NAME },
-		await readKeys(ctx.wshimLogger, ctx.env.ISSUANCE_KEYS)
-	);
-};
+}
