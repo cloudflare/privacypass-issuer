@@ -385,8 +385,6 @@ export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 };
 
 const rotateKey = async (ctx: Context): Promise<Uint8Array> => {
-	ctx.metrics.keyRotationTotal.inc();
-
 	// Generate a new type 2 Issuer key
 	let rsaSsaPssPublicKey: Uint8Array;
 	let tokenKeyID: number;
@@ -431,6 +429,7 @@ const rotateKey = async (ctx: Context): Promise<Uint8Array> => {
 
 	ctx.wshimLogger.log(`Key rotated successfully, new key ${tokenKeyID}`);
 
+	ctx.metrics.lastRotationTimestamp.set(Date.now());
 	return rsaSsaPssPublicKey;
 };
 

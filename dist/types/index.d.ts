@@ -132,7 +132,7 @@ declare class MetricsRegistry {
 	erroredRequestsTotal: CounterType;
 	issuanceKeyErrorTotal: CounterType;
 	issuanceRequestTotal: CounterType;
-	keyRotationTotal: CounterType;
+	lastRotationTimestamp: CounterType;
 	keyClearTotal: CounterType;
 	requestsDurationMs: HistogramType;
 	requestsTotal: CounterType;
@@ -147,6 +147,7 @@ declare class MetricsRegistry {
 	wshimOptions?: WshimOptions;
 	constructor(env: Bindings, logger: Logger);
 	private createCounter;
+	private createGauge;
 	private createHistogram;
 	private create;
 	/**
