@@ -594,7 +594,7 @@ export default {
 			if (event.cron === checkedEnv.ROTATION_CRON_STRING) {
 				await handleRotateKey(context, sampleRequest);
 			} else if (event.cron === checkedEnv.BACKUPS_CRON_STRING) {
-				await env.KEY_BACKUP_WF?.create();
+				await checkedEnv.KEY_BACKUP_WF?.create();
 			} else {
 				await handleClearKey(context, sampleRequest);
 			}

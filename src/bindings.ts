@@ -38,7 +38,7 @@ export interface Bindings {
 	BACKUPS_CRON_STRING: string | null;
 	BACKUPS_SERVICE_ACCOUNT_KEY: string | null;
 	BACKUPS_BUCKET_NAME: string | null;
-	KEY_BACKUP_WF: Workflow;
+	KEY_BACKUP_WF: Workflow | null;
 }
 
 export const DEFAULT_MINIMUM_FRESHEST_KEYS = '2';
@@ -73,7 +73,6 @@ export function checkMandatoryBindings(env: UncheckedBindings): Bindings {
 	if (env.KEY_LIFESPAN_IN_MS === undefined) throw new Error('KEY_LIFESPAN_IN_MS is undefined');
 	if (env.KEY_NOT_BEFORE_DELAY_IN_MS === undefined)
 		throw new Error('KEY_NOT_BEFORE_DELAY_IN_MS is undefined');
-	if (env.KEY_BACKUP_WF === undefined) throw new Error('KEY_BACKUP_WF is undefined');
 
 	return {
 		DIRECTORY_CACHE_MAX_AGE_SECONDS: env.DIRECTORY_CACHE_MAX_AGE_SECONDS ?? null,
@@ -97,6 +96,6 @@ export function checkMandatoryBindings(env: UncheckedBindings): Bindings {
 		BACKUPS_CRON_STRING: env.BACKUPS_CRON_STRING ?? null,
 		BACKUPS_SERVICE_ACCOUNT_KEY: env.BACKUPS_SERVICE_ACCOUNT_KEY ?? null,
 		BACKUPS_BUCKET_NAME: env.BACKUPS_BUCKET_NAME ?? null,
-		KEY_BACKUP_WF: env.KEY_BACKUP_WF,
+		KEY_BACKUP_WF: env.KEY_BACKUP_WF ?? null,
 	};
 }
