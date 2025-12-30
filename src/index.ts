@@ -301,7 +301,7 @@ export const handleHeadTokenDirectory = async (ctx: Context, request: Request) =
 
 export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 	let cache: Cache | undefined;
-	if (ctx.cacheSettings) {
+	if (ctx.cacheSettings.enabled) {
 		cache = await getDirectoryCache();
 		let cachedResponse: Response | undefined;
 		try {
@@ -354,15 +354,13 @@ export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 		'content-type': MediaType.PRIVATE_TOKEN_ISSUER_DIRECTORY,
 		'content-length': body.length.toString(),
 	};
-	const cacheHeaders: Record<string, string> = ctx.cacheSettings
-		? {
-				'cache-control': `public, max-age=${ctx.cacheSettings.maxAgeSeconds}`,
-				'date': new Date().toUTCString(),
-				'etag': `"${hexEncode(
-					new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(body)))
-				)}"`,
-			}
-		: {};
+	const cacheHeaders: Record<string, string> = {
+		'cache-control': `public, max-age=${ctx.cacheSettings.maxAgeSeconds}`,
+		'date': new Date().toUTCString(),
+		'etag': `"${hexEncode(
+			new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(body)))
+		)}"`,
+	};
 
 	const response = new Response(body, {
 		headers: {
@@ -371,7 +369,7 @@ export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 		},
 	});
 
-	if (ctx.cacheSettings) {
+	if (ctx.cacheSettings.enabled) {
 		const toCacheResponse = response.clone();
 		// directory cache time within worker should be between 70% and 100% of browser cache time
 		const cacheTime = Math.floor(
@@ -423,7 +421,7 @@ const rotateKey = async (ctx: Context): Promise<Uint8Array> => {
 		customMetadata: metadata,
 	});
 
-	if (ctx.cacheSettings) {
+	if (ctx.cacheSettings.enabled) {
 		ctx.waitUntil(clearDirectoryCache(ctx));
 	}
 
@@ -482,7 +480,7 @@ const clearKey = async (ctx: Context): Promise<string[]> => {
 
 	if (toDeleteArray.length > 0) {
 		await ctx.bucket.ISSUANCE_KEYS.delete(toDeleteArray);
-		if (ctx.cacheSettings) {
+		if (ctx.cacheSettings.enabled) {
 			ctx.waitUntil(clearDirectoryCache(ctx));
 		}
 	}
