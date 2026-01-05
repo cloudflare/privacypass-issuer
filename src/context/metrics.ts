@@ -1,7 +1,15 @@
 // Copyright (c) 2023 Cloudflare, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { CounterType, HistogramType, Labels, RegistryType, Registry } from 'promjs-plus';
+import {
+	CounterType,
+	HistogramType,
+	Labels,
+	RegistryType,
+	Registry,
+	GaugeType,
+	CollectorType,
+} from 'promjs-plus';
 import { Bindings } from '../bindings';
 import { WshimOptions } from '.';
 import { Logger } from './logging';
@@ -32,7 +40,7 @@ export class MetricsRegistry {
 	erroredRequestsTotal: CounterType;
 	issuanceKeyErrorTotal: CounterType;
 	issuanceRequestTotal: CounterType;
-	keyRotationTotal: CounterType;
+	lastRotationTimestamp: CounterType;
 	keyClearTotal: CounterType;
 	requestsDurationMs: HistogramType;
 	requestsTotal: CounterType;
@@ -81,10 +89,10 @@ export class MetricsRegistry {
 			'issuance_request_total',
 			'Number of requests for private token issuance.'
 		);
-		this.keyRotationTotal = this.create(
-			'counter',
-			'key_rotation_total',
-			'Number of key rotation performed.'
+		this.lastRotationTimestamp = this.create(
+			'gauge',
+			'last_rotation_timestamp',
+			'last time a rotation happened'
 		);
 		this.keyClearTotal = this.create(
 			'counter',
@@ -118,64 +126,38 @@ export class MetricsRegistry {
 
 	private createCounter(name: string, help?: string): CounterType {
 		const counter = this.registry.create('counter', name, help);
-		const defaultLabels = this.defaultLabels;
-		return new Proxy(counter, {
-			get(target, prop, receiver) {
-				if (['collect', 'get', 'inc', 'reset'].includes(prop.toString())) {
-					return function (labels?: Labels) {
-						const mergedLabels = { ...defaultLabels, ...labels };
-						return Reflect.get(target, prop, receiver)?.call(target, mergedLabels);
-					};
-				}
-				if (['add', 'set'].includes(prop.toString())) {
-					return function (value: number, labels?: Labels) {
-						const mergedLabels = { ...defaultLabels, ...labels };
-						return Reflect.get(target, prop, receiver)?.call(target, value, mergedLabels);
-					};
-				}
-				return Reflect.get(target, prop, receiver);
-			},
-		});
+		return makeCollectorProxy(counter, this.defaultLabels, COUNTER_FNS);
+	}
+
+	private createGauge(name: string, help: string): GaugeType {
+		const gauge = this.registry.create('gauge', name, help);
+		return makeCollectorProxy(gauge, this.defaultLabels, GAUGE_FNS);
 	}
 
 	private createHistogram(name: string, help?: string, histogramBuckets?: number[]): HistogramType {
 		const histogram = this.registry.create('histogram', name, help, histogramBuckets);
-		const defaultLabels = this.defaultLabels;
-		return new Proxy(histogram, {
-			get(target, prop, receiver) {
-				if (['collect', 'get', 'reset'].includes(prop.toString())) {
-					return function (labels?: Labels) {
-						const mergedLabels = { ...defaultLabels, ...labels };
-						return Reflect.get(target, prop, receiver)?.call(target, mergedLabels);
-					};
-				}
-				if (['add', 'observe', 'set'].includes(prop.toString())) {
-					return function (value: number, labels?: Labels) {
-						const mergedLabels = { ...defaultLabels, ...labels };
-						return Reflect.get(target, prop, receiver)?.call(target, value, mergedLabels);
-					};
-				}
-				return Reflect.get(target, prop, receiver);
-			},
-		});
+		return makeCollectorProxy(histogram, this.defaultLabels, HISTOGRAM_FNS);
 	}
 
-	private create(type: 'counter', name: string, help?: string): CounterType;
+	private create(type: 'counter', name: string, help: string): CounterType;
+	private create(type: 'gauge', name: string, help: string): CounterType;
 	private create(
 		type: 'histogram',
 		name: string,
-		help?: string,
+		help: string,
 		histogramBuckets?: number[]
 	): HistogramType;
 	private create(
-		type: 'counter' | 'histogram',
+		type: CollectorType,
 		name: string,
-		help?: string,
+		help: string,
 		histogramBuckets?: number[]
 	): CounterType | HistogramType {
 		switch (type) {
 			case 'counter':
 				return this.createCounter(name, help);
+			case 'gauge':
+				return this.createGauge(name, help);
 			case 'histogram':
 				return this.createHistogram(name, help, histogramBuckets);
 			default:
@@ -197,4 +179,99 @@ export class MetricsRegistry {
 
 		await this.wshimOptions.flush(this.registry.metrics());
 	}
+}
+
+const COUNTER_FNS: CollectorFns<CounterType> = makeCollectorFns<CounterType>()(
+	'reset',
+	'get',
+	'inc',
+	'collect'
+)('set', 'add');
+
+const GAUGE_FNS: CollectorFns<GaugeType> = makeCollectorFns<GaugeType>()(
+	...COUNTER_FNS.unary,
+	'dec'
+)(...COUNTER_FNS.binary, 'sub');
+
+const HISTOGRAM_FNS: CollectorFns<HistogramType> = makeCollectorFns<HistogramType>()(
+	'collect',
+	'get',
+	'reset'
+)('set', 'observe');
+
+// Creates a collector proxy which always includes the defaultLabels along with the passed in labels
+function makeCollectorProxy<T extends object>(
+	collector: T,
+	defaultLabels: Record<string, string>,
+	fns: CollectorFns<T>
+): T {
+	return new Proxy(collector, {
+		get(target, prop, receiver) {
+			if ((fns.unary as string[]).includes(prop.toString())) {
+				return function (labels?: Labels) {
+					const mergedLabels = { ...defaultLabels, ...labels };
+					// eslint-disable-next-line @typescript-eslint/no-explicit-any
+					return (Reflect.get(target, prop, receiver) as any)?.call(target, mergedLabels);
+				};
+			}
+			if ((fns.binary as string[]).includes(prop.toString())) {
+				return function (value: number, labels?: Labels) {
+					const mergedLabels = { ...defaultLabels, ...labels };
+					// eslint-disable-next-line @typescript-eslint/no-explicit-any
+					return (Reflect.get(target, prop, receiver) as any)?.call(target, value, mergedLabels);
+				};
+			}
+			return Reflect.get(target, prop, receiver);
+		},
+	});
+}
+
+// Type magic used to guarantee we create type safe and exaustive object
+// proxies for the metric collectors types.
+//
+// Collector types are: Counter, Gauge and Histogram
+
+// The functions of a collector we want to proxy.
+type CollectorFns<T> = {
+	// functions that take only labels.
+	unary: FunctionsOfArity<T, 1>[];
+	// functions that a value along with labels.
+	binary: FunctionsOfArity<T, 2>[];
+};
+
+// Extract the last element of a tuple
+type Last<T extends unknown[]> = T extends [...unknown[], infer L] ? L : never;
+
+// Checks Arity (N) AND Last Argument (Labels)
+type FunctionsOfArity<T, N extends number> = {
+	[K in keyof T]-?: T[K] extends (...args: never[]) => unknown
+		? Required<Parameters<T[K]>>['length'] extends N // Check 1: Exact Arity
+			? Last<Parameters<T[K]>> extends Labels // Check 2: Last Arg is Labels
+				? K
+				: never
+			: never
+		: never;
+}[keyof T];
+
+/**
+ * Instantiates `CollectorFns` object guaranteeing that it contains every function
+ * exposed by the original T
+ */
+function makeCollectorFns<T extends object>() {
+	type A1 = FunctionsOfArity<T, 1>;
+	type A2 = FunctionsOfArity<T, 2>;
+
+	// resolves to never when Params does not contain every value in Set
+	type IsExaustive<Set, Params extends unknown[]> =
+		Exclude<Set, Params[number]> extends never
+			? unknown
+			: ['Error: Missing keys', Exclude<Set, Params[number]>];
+
+	// builder like sequence of functions that require it's parameters to be
+	// exactly the unary and binary functions of the collector
+	return <Unary extends A1[]>(...unary: Unary & IsExaustive<A1, Unary>) => {
+		return <Binary extends A2[]>(...binary: Binary & IsExaustive<A2, Binary>) => {
+			return { unary, binary };
+		};
+	};
 }

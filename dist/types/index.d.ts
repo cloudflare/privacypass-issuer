@@ -56,7 +56,7 @@ export interface Bindings {
 	BACKUPS_CRON_STRING: string | null;
 	BACKUPS_SERVICE_ACCOUNT_KEY: string | null;
 	BACKUPS_BUCKET_NAME: string | null;
-	KEY_BACKUP_WF: Workflow;
+	KEY_BACKUP_WF: Workflow | null;
 }
 export type NonNullableFields<T> = {
 	[P in keyof T]: T[P] extends infer U | null ? U : T[P];
@@ -132,7 +132,7 @@ declare class MetricsRegistry {
 	erroredRequestsTotal: CounterType;
 	issuanceKeyErrorTotal: CounterType;
 	issuanceRequestTotal: CounterType;
-	keyRotationTotal: CounterType;
+	lastRotationTimestamp: CounterType;
 	keyClearTotal: CounterType;
 	requestsDurationMs: HistogramType;
 	requestsTotal: CounterType;
@@ -147,6 +147,7 @@ declare class MetricsRegistry {
 	wshimOptions?: WshimOptions;
 	constructor(env: Bindings, logger: Logger);
 	private createCounter;
+	private createGauge;
 	private createHistogram;
 	private create;
 	/**
@@ -193,7 +194,8 @@ declare class Context {
 	performance: Performance;
 	serviceInfo?: ServiceInfo;
 	key_id?: number;
-	cacheSettings?: {
+	cacheSettings: {
+		enabled: boolean;
 		maxAgeSeconds: number;
 	};
 	constructor(request: Request, env: Bindings, _waitUntil: WaitUntilFunc, logger: Logger, metrics: MetricsRegistry, wshimLogger: WshimLogger, prefix?: string | undefined);

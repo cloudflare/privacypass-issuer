@@ -301,7 +301,7 @@ export const handleHeadTokenDirectory = async (ctx: Context, request: Request) =
 
 export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 	let cache: Cache | undefined;
-	if (ctx.cacheSettings) {
+	if (ctx.cacheSettings.enabled) {
 		cache = await getDirectoryCache();
 		let cachedResponse: Response | undefined;
 		try {
@@ -354,15 +354,13 @@ export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 		'content-type': MediaType.PRIVATE_TOKEN_ISSUER_DIRECTORY,
 		'content-length': body.length.toString(),
 	};
-	const cacheHeaders: Record<string, string> = ctx.cacheSettings
-		? {
-				'cache-control': `public, max-age=${ctx.cacheSettings.maxAgeSeconds}`,
-				'date': new Date().toUTCString(),
-				'etag': `"${hexEncode(
-					new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(body)))
-				)}"`,
-			}
-		: {};
+	const cacheHeaders: Record<string, string> = {
+		'cache-control': `public, max-age=${ctx.cacheSettings.maxAgeSeconds}`,
+		'date': new Date().toUTCString(),
+		'etag': `"${hexEncode(
+			new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(body)))
+		)}"`,
+	};
 
 	const response = new Response(body, {
 		headers: {
@@ -371,7 +369,7 @@ export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 		},
 	});
 
-	if (ctx.cacheSettings) {
+	if (ctx.cacheSettings.enabled) {
 		const toCacheResponse = response.clone();
 		// directory cache time within worker should be between 70% and 100% of browser cache time
 		const cacheTime = Math.floor(
@@ -385,8 +383,6 @@ export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 };
 
 const rotateKey = async (ctx: Context): Promise<Uint8Array> => {
-	ctx.metrics.keyRotationTotal.inc();
-
 	// Generate a new type 2 Issuer key
 	let rsaSsaPssPublicKey: Uint8Array;
 	let tokenKeyID: number;
@@ -425,12 +421,13 @@ const rotateKey = async (ctx: Context): Promise<Uint8Array> => {
 		customMetadata: metadata,
 	});
 
-	if (ctx.cacheSettings) {
+	if (ctx.cacheSettings.enabled) {
 		ctx.waitUntil(clearDirectoryCache(ctx));
 	}
 
 	ctx.wshimLogger.log(`Key rotated successfully, new key ${tokenKeyID}`);
 
+	ctx.metrics.lastRotationTimestamp.set(Date.now());
 	return rsaSsaPssPublicKey;
 };
 
@@ -483,7 +480,7 @@ const clearKey = async (ctx: Context): Promise<string[]> => {
 
 	if (toDeleteArray.length > 0) {
 		await ctx.bucket.ISSUANCE_KEYS.delete(toDeleteArray);
-		if (ctx.cacheSettings) {
+		if (ctx.cacheSettings.enabled) {
 			ctx.waitUntil(clearDirectoryCache(ctx));
 		}
 	}
@@ -595,7 +592,7 @@ export default {
 			if (event.cron === checkedEnv.ROTATION_CRON_STRING) {
 				await handleRotateKey(context, sampleRequest);
 			} else if (event.cron === checkedEnv.BACKUPS_CRON_STRING) {
-				await env.KEY_BACKUP_WF?.create();
+				await checkedEnv.KEY_BACKUP_WF?.create();
 			} else {
 				await handleClearKey(context, sampleRequest);
 			}

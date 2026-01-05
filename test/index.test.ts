@@ -4,7 +4,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { env, ProvidedEnv, createExecutionContext } from 'cloudflare:test';
 import { Context } from '../src/context';
-import { handleTokenRequest, handleClearKey, default as workerObject } from '../src/index';
+import {
+	handleTokenRequest,
+	handleClearKey,
+	default as workerObject,
+	handleTokenDirectory,
+} from '../src/index';
 import { IssuerConfigurationResponse } from '../src/types';
 import { b64ToB64URL, u8ToB64 } from '../src/utils/base64';
 import { MockCache, mockDateNow, clearDateMocks, getContext } from './mocks';
@@ -332,6 +337,34 @@ describe('directory', () => {
 		expect(response.status).toBe(304);
 
 		spy.mockClear();
+	});
+
+	it('should return cache headers even if caching is disabled', async () => {
+		const directoryRequest = new Request(directoryURL);
+
+		const response = await workerObject.fetch(
+			directoryRequest,
+			{ ...env, USE_CACHE_API: 'false' },
+			new createExecutionContext()
+		);
+		expect(response.ok).toBe(true);
+		expect(response.headers.get('cache-control')).toBeDefined();
+		expect(response.headers.get('date')).toBeDefined();
+		expect(response.headers.get('etag')).toBeDefined();
+	});
+
+	it('should return cache headers', async () => {
+		const directoryRequest = new Request(directoryURL);
+
+		const response = await workerObject.fetch(
+			directoryRequest,
+			{ ...env, USE_CACHE_API: 'true' },
+			new createExecutionContext()
+		);
+		expect(response.ok).toBe(true);
+		expect(response.headers.get('cache-control')).toBeDefined();
+		expect(response.headers.get('date')).toBeDefined();
+		expect(response.headers.get('etag')).toBeDefined();
 	});
 
 	it('not-before should be the unix time number of seconds as a 64-bit integer', async () => {
