@@ -26,7 +26,7 @@ export enum TokenType {
 
 export interface ServiceInfo {
 	url: string;
-	route: string;
+	route: string; // TODO: delete this
 	service: string;
 }
 

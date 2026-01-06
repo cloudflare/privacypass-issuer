@@ -60,6 +60,19 @@ export class WshimOptions {
 
 const DEFAULT_DIRECTORY_CACHE_MAX_AGE_SECONDS = 5 * 60;
 
+type ContextBindings = Pick<
+	Bindings,
+	| 'DIRECTORY_CACHE_MAX_AGE_SECONDS'
+	| 'USE_CACHE_API'
+	| 'ISSUANCE_KEYS'
+	| 'PERFORMANCE'
+	| 'KEY_NOT_BEFORE_DELAY_IN_MS'
+	| 'MINIMUM_FRESHEST_KEYS'
+	| 'KEY_LIFESPAN_IN_MS'
+	| 'BACKUPS_SERVICE_ACCOUNT_KEY'
+	| 'BACKUPS_BUCKET_NAME'
+>;
+
 export type WaitUntilFunc = (p: Promise<unknown>) => void;
 export class Context {
 	public hostname: string;
@@ -76,7 +89,7 @@ export class Context {
 
 	constructor(
 		request: Request,
-		public readonly env: Bindings,
+		public readonly env: ContextBindings,
 		private readonly _waitUntil: WaitUntilFunc,
 		public readonly logger: Logger,
 		public readonly metrics: MetricsRegistry,

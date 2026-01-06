@@ -5,7 +5,6 @@ import {
 	CounterType,
 	HistogramType,
 	Labels,
-	RegistryType,
 	Registry,
 	GaugeType,
 	CollectorType,
@@ -33,8 +32,6 @@ const HISTOGRAM_MS_BUCKETS = [50, 100, 200, 400, 1000, 2 * 1000, 4 * 1000];
  * A wrapper around the promjs registry to manage registering and publishing metrics
  */
 export class MetricsRegistry {
-	registry: RegistryType;
-
 	asyncRetriesTotal: CounterType;
 	directoryCacheMissTotal: CounterType;
 	erroredRequestsTotal: CounterType;
@@ -54,15 +51,17 @@ export class MetricsRegistry {
 	};
 	wshimOptions?: WshimOptions;
 
-	constructor(env: Bindings, logger: Logger) {
+	constructor(
+		env: Bindings,
+		logger: Logger,
+		private readonly registry: Registry = new Registry()
+	) {
 		this.defaultLabels = {
 			env: env.ENVIRONMENT,
 			service: env.SERVICE,
 			version: env.VERSION_METADATA.id ?? RELEASE,
 		};
 		this.wshimOptions = WshimOptions.init(env, 'prometheus', logger);
-
-		this.registry = new Registry();
 
 		this.asyncRetriesTotal = this.create(
 			'counter',

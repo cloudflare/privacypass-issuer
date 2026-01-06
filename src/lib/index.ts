@@ -4,14 +4,8 @@
 // eslint-disable-next-line @typescript-eslint/triple-slash-reference
 /// <reference path="./global.d.ts" />
 
-import {
-	Bindings,
-	DEFAULT_MINIMUM_FRESHEST_KEYS,
-	UncheckedBindings,
-	checkMandatoryBindings,
-} from './bindings';
+import { DEFAULT_MINIMUM_FRESHEST_KEYS } from './bindings';
 import { Context } from './context';
-import { Router } from './router';
 import {
 	BadTokenKeyRequestedError,
 	HeaderNotDefinedError,
@@ -20,14 +14,11 @@ import {
 	InvalidBatchedTokenTypeError,
 	InvalidContentTypeError,
 	MismatchedTokenKeyIDError,
-	handleError,
-	HTTPError,
 } from './errors';
 import { IssuerConfigurationResponse, TokenType } from './types';
 import { b64ToB64URL, b64Tou8, b64URLtoB64, u8ToB64 } from './utils/base64';
 import {
 	MediaType,
-	PRIVATE_TOKEN_ISSUER_DIRECTORY,
 	TOKEN_TYPES,
 	publicVerif,
 	arbitraryBatched,
@@ -45,9 +36,6 @@ const { BlindRSAMode, Issuer, TokenRequest } = publicVerif;
 const { BatchedTokenRequest, BatchedTokenResponse, Issuer: BatchedTokensIssuer } = arbitraryBatched;
 
 import { shouldClearKey } from './utils/keyRotation';
-import { WorkerEntrypoint } from 'cloudflare:workers';
-
-import { BaseRpcOptions, IssueOptions } from './types';
 
 export { KeyBackupWorkflow } from './key-backup';
 export {
@@ -136,7 +124,7 @@ export const handleTokenRequest = async (ctx: Context, request: Request): Promis
 	});
 };
 
-export const handleSingleTokenRequest = async (
+const handleSingleTokenRequest = async (
 	ctx: Context,
 	buffer: ArrayBuffer,
 	domain: string
@@ -162,7 +150,7 @@ export const handleSingleTokenRequest = async (
 	};
 };
 
-export const handleBatchedTokenRequest = async (
+const handleBatchedTokenRequest = async (
 	ctx: Context,
 	buffer: ArrayBuffer,
 	domain: string
@@ -290,6 +278,34 @@ const getBlindRSAKeyPair = async (
 	return { sk, pk, notBefore };
 };
 
+export const keyDirectory = async (ctx: Context): Promise<IssuerConfigurationResponse> => {
+	const keyList = await ctx.bucket.ISSUANCE_KEYS.list({ include: ['customMetadata'] });
+
+	if (keyList.objects.length === 0) {
+		throw new Error('Issuer not initialised');
+	}
+
+	// there is no reason for an auditor to continue serving keys beyond the minimum requirement
+	const freshestKeyCount = Number.parseInt(
+		ctx.env.MINIMUM_FRESHEST_KEYS ?? DEFAULT_MINIMUM_FRESHEST_KEYS
+	);
+	const keys = keyList.objects
+		.sort((a, b) => new Date(b.uploaded).getTime() - new Date(a.uploaded).getTime())
+		.slice(0, freshestKeyCount);
+
+	return {
+		'issuer-request-uri': '/token-request',
+		'token-keys': keys.map(key => ({
+			'token-type': TokenType.BlindRSA,
+			'token-key': (key.customMetadata as StorageMetadata).publicKey,
+			'not-before': Number.parseInt(
+				(key.customMetadata as StorageMetadata).notBefore ??
+					(new Date(key.uploaded).getTime() / 1000).toFixed(0)
+			),
+		})),
+	};
+};
+
 export const handleHeadTokenDirectory = async (ctx: Context, request: Request) => {
 	const getResponse = await handleTokenDirectory(ctx, request);
 
@@ -322,33 +338,7 @@ export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 		ctx.metrics.directoryCacheMissTotal.inc();
 	}
 
-	const keyList = await ctx.bucket.ISSUANCE_KEYS.list({ include: ['customMetadata'] });
-
-	if (keyList.objects.length === 0) {
-		throw new Error('Issuer not initialised');
-	}
-
-	// there is no reason for an auditor to continue serving keys beyond the minimum requirement
-	const freshestKeyCount = Number.parseInt(
-		ctx.env.MINIMUM_FRESHEST_KEYS ?? DEFAULT_MINIMUM_FRESHEST_KEYS
-	);
-	const keys = keyList.objects
-		.sort((a, b) => new Date(b.uploaded).getTime() - new Date(a.uploaded).getTime())
-		.slice(0, freshestKeyCount);
-
-	const directory: IssuerConfigurationResponse = {
-		'issuer-request-uri': '/token-request',
-		'token-keys': keys.map(key => ({
-			'token-type': TokenType.BlindRSA,
-			'token-key': (key.customMetadata as StorageMetadata).publicKey,
-			'not-before': Number.parseInt(
-				(key.customMetadata as StorageMetadata).notBefore ??
-					(new Date(key.uploaded).getTime() / 1000).toFixed(0)
-			),
-		})),
-	};
-
-	const body = JSON.stringify(directory);
+	const body = JSON.stringify(keyDirectory(ctx));
 
 	const baseHeaders = {
 		'content-type': MediaType.PRIVATE_TOKEN_ISSUER_DIRECTORY,
@@ -382,7 +372,7 @@ export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 	return response;
 };
 
-const rotateKey = async (ctx: Context): Promise<Uint8Array> => {
+export const rotateKey = async (ctx: Context): Promise<Uint8Array> => {
 	// Generate a new type 2 Issuer key
 	let rsaSsaPssPublicKey: Uint8Array;
 	let tokenKeyID: number;
@@ -435,7 +425,7 @@ export const handleRotateKey = async (ctx: Context, _request: Request) => {
 	return new Response(`New key ${b64ToB64URL(u8ToB64(await rotateKey(ctx)))}`, { status: 201 });
 };
 
-const clearKey = async (ctx: Context): Promise<string[]> => {
+export const clearKey = async (ctx: Context): Promise<string[]> => {
 	ctx.metrics.keyClearTotal.inc();
 
 	const keys = await ctx.bucket.ISSUANCE_KEYS.list({ shouldUseCache: false });
@@ -500,110 +490,4 @@ export const handleClearKey = async (ctx: Context, _request: Request) => {
 	} else {
 		return new Response(`Keys cleared: ${deletedKeys.join('\n')}`, { status: 201 });
 	}
-};
-
-export class IssuerHandler extends WorkerEntrypoint<Bindings> {
-	private context(url: string, prefix?: string): Context {
-		const env = this.env;
-		const ectx = this.ctx;
-
-		const sample = new Request(url);
-		return Router.buildContext(sample, env, ectx, prefix);
-	}
-
-	async fetch(request: Request): Promise<Response> {
-		const router = new Router();
-
-		router
-			.get(PRIVATE_TOKEN_ISSUER_DIRECTORY, handleTokenDirectory)
-			.post('/token-request', handleTokenRequest)
-			.post('/admin/rotate', handleRotateKey)
-			.post('/admin/clear', handleClearKey);
-
-		return router.handle(
-			request as Request<Bindings, IncomingRequestCfProperties<unknown>>,
-			this.env,
-			this.ctx
-		);
-	}
-
-	async tokenDirectory(opts: BaseRpcOptions): Promise<Response> {
-		return this.withMetrics({ op: 'tokenDirectory', ...opts }, ctx =>
-			handleTokenDirectory(ctx, new Request(opts.serviceInfo.url))
-		);
-	}
-
-	async issue(opts: IssueOptions): Promise<IssueResponse> {
-		return this.withMetrics({ op: 'issue', ...opts }, ctx =>
-			issue(ctx, opts.tokenRequest, new URL(opts.serviceInfo.url).host, opts.contentType)
-		);
-	}
-
-	async rotateKey(opts: BaseRpcOptions): Promise<Uint8Array> {
-		return this.withMetrics({ op: 'rotateKey', ...opts }, ctx => rotateKey(ctx));
-	}
-
-	async clearKey(opts: BaseRpcOptions): Promise<string[]> {
-		return this.withMetrics({ op: 'clearKey', ...opts }, ctx => clearKey(ctx));
-	}
-
-	private async withMetrics<T>(
-		opts: BaseRpcOptions & { op: 'tokenDirectory' | 'issue' | 'rotateKey' | 'clearKey' },
-		fn: (ctx: Context) => Promise<T>
-	): Promise<T> {
-		const { prefix, serviceInfo, op } = opts;
-		const hostname = new URL(serviceInfo.url).hostname;
-		const ctx = this.context(serviceInfo.url, prefix);
-		const route = serviceInfo?.route ?? `/${op}`;
-		ctx.serviceInfo = serviceInfo;
-
-		const start = ctx.performance.now();
-		try {
-			return await fn(ctx);
-		} catch (e: unknown) {
-			const err = e as Error;
-			const status = e instanceof HTTPError ? e.status : 500;
-			await handleError(ctx, err, { path: route, hostname, status });
-			throw e;
-		} finally {
-			const labels = { path: route, hostname };
-			const duration = ctx.performance.now() - start;
-
-			ctx.metrics.requestsTotal.inc(labels);
-			ctx.metrics.requestsDurationMs.observe(duration, labels);
-			ctx.waitUntil(ctx.postProcessing());
-		}
-	}
-}
-
-export default {
-	async fetch(request: Request, env: UncheckedBindings, ctx: ExecutionContext) {
-		const issuerHandler = new IssuerHandler(ctx, checkMandatoryBindings(env));
-		return issuerHandler.fetch(request);
-	},
-
-	async scheduled(event: ScheduledEvent, env: UncheckedBindings, ctx: ExecutionContext) {
-		const sampleRequest = new Request(`https://schedule.example.com`);
-
-		const checkedEnv = checkMandatoryBindings(env);
-		const context = Router.buildContext(sampleRequest, checkedEnv, ctx);
-
-		try {
-			if (event.cron === checkedEnv.ROTATION_CRON_STRING) {
-				await handleRotateKey(context, sampleRequest);
-			} else if (event.cron === checkedEnv.BACKUPS_CRON_STRING) {
-				await checkedEnv.KEY_BACKUP_WF?.create();
-			} else {
-				await handleClearKey(context, sampleRequest);
-			}
-		} catch (err) {
-			await handleError(context, err as Error, {
-				path: '/cron',
-				status: err instanceof HTTPError ? err.status : 500,
-			});
-			throw err;
-		} finally {
-			ctx.waitUntil(context.postProcessing());
-		}
-	},
 };
