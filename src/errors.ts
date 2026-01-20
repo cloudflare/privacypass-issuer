@@ -38,9 +38,9 @@ export async function handleError(ctx: Context, error: Error, labels?: Labels) {
 		logEntry.path = labels.path;
 	}
 
-	if (status === 500) {
+	// if (status === 500) {
 		ctx.wshimLogger.error(logEntry);
-	}
+	// }
 
 	if (shouldSendToSentry(error)) {
 		ctx.logger.captureException(error);
