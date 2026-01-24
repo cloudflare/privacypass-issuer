@@ -53,7 +53,7 @@ export class WshimOptions {
 				);
 			}
 		} catch (error) {
-			console.error(`Failed to flush to ${this.endpoint}:`, error);
+			console.error(`Failed to flush to ${this.endpoint}: ${error}`);
 		}
 	}
 }
