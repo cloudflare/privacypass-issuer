@@ -1,17 +1,20 @@
 on:
   pull_request: {}
   workflow_dispatch: {}
-  push: 
+  push:
     branches:
       - main
       - master
   schedule:
     - cron: '0 0 * * *'
 name: Semgrep config
+permissions:
+  contents: read
 jobs:
   semgrep:
     name: semgrep/ci
     runs-on: ubuntu-latest
+    if: github.repository == 'cloudflare/privacypass-issuer'
     env:
       SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
       SEMGREP_URL: https://cloudflare.semgrep.dev
@@ -20,5 +23,5 @@ jobs:
     container:
       image: returntocorp/semgrep
     steps:
-      - uses: actions/checkout@v4
-      - run: semgrep ci
+      - uses: actions/checkout@v6
+      - run: semgrep ci --verbose

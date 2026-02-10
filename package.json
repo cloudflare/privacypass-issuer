@@ -36,8 +36,8 @@
 	},
 	"devDependencies": {
 		"@cloudflare/blindrsa-ts": "0.4.3",
-		"@cloudflare/vitest-pool-workers": "0.8.71",
-		"@cloudflare/workers-types": "^4.20251014.0",
+		"@cloudflare/vitest-pool-workers": "0.12.5",
+		"@cloudflare/workers-types": "4.20260122.0",
 		"@typescript-eslint/eslint-plugin": "6.21.0",
 		"@typescript-eslint/parser": "6.21.0",
 		"commander": "12.1.0",
@@ -51,13 +51,13 @@
 		"prettier": "3.2.2",
 		"sade": "1.8.1",
 		"vitest": "3.0.8",
-		"wrangler": "4.46.0"
+		"wrangler": "4.59.3"
 	},
 	"dependencies": {
 		"@cloudflare/privacypass-ts": "0.7.1",
 		"@sentry/cli": "2.26.0",
 		"@sentry/types": "7.95.0",
-		"@tsndr/cloudflare-worker-jwt": "^3.2.0",
+		"@tsndr/cloudflare-worker-jwt": "3.2.1",
 		"promjs-plus": "0.5.4",
 		"toucan-js": "3.3.1",
 		"typescript": "5.3.3"
