@@ -19,7 +19,7 @@ import {
 	MediaType,
 	PRIVATE_TOKEN_ISSUER_DIRECTORY,
 	publicVerif,
-	arbitraryBatched,
+	genericBatched,
 	util,
 	TokenChallenge,
 	TOKEN_TYPES,
@@ -127,16 +127,16 @@ describe('challenge handlers', () => {
 		const invs: Uint8Array[] = [];
 
 		const tokReqs = new Array<publicVerif.TokenRequest>(nTokens);
-		const batchedTokenReqs = new Array<arbitraryBatched.TokenRequest>(nTokens);
+		const batchedTokenReqs = new Array<genericBatched.TokenRequest>(nTokens);
 
 		for (let i = 0; i < nTokens; i++) {
 			const { blindedMsg, inv } = await suite.blind(publicKey, preparedMsg);
 			tokReqs[i] = new publicVerif.TokenRequest(tokenKeyId, blindedMsg, BLIND_RSA);
-			batchedTokenReqs[i] = new arbitraryBatched.TokenRequest(tokReqs[i]);
+			batchedTokenReqs[i] = new genericBatched.TokenRequest(tokReqs[i]);
 			invs.push(inv);
 		}
 
-		const batchedTokenRequest = new arbitraryBatched.BatchedTokenRequest(batchedTokenReqs);
+		const batchedTokenRequest = new genericBatched.BatchedTokenRequest(batchedTokenReqs);
 		const request = new Request(tokenRequestURL, {
 			method: 'POST',
 			headers: { 'content-type': MediaType.ARBITRARY_BATCHED_TOKEN_REQUEST },
@@ -148,7 +148,8 @@ describe('challenge handlers', () => {
 		expect(response.headers.get('content-type')).toBe(MediaType.ARBITRARY_BATCHED_TOKEN_RESPONSE);
 
 		const responseBytes = new Uint8Array(await response.arrayBuffer());
-		const batchedTokenResponse = arbitraryBatched.BatchedTokenResponse.deserialize(responseBytes);
+		const batchedTokenResponse =
+			genericBatched.GenericBatchTokenResponse.deserialize(responseBytes);
 
 		expect(batchedTokenResponse.tokenResponses.length).toBe(nTokens);
 
@@ -157,7 +158,8 @@ describe('challenge handlers', () => {
 			const tokenResponse = batchedTokenResponse.tokenResponses[i];
 			expect(tokenResponse.tokenResponse).not.toBeNull();
 
-			const blindSignature = tokenResponse.tokenResponse!;
+			// In 0.8.0, tokenResponse.tokenResponse is already a TokenResponse object
+			const blindSignature = (tokenResponse.tokenResponse as publicVerif.TokenResponse).blindSig;
 			const signature = await suite.finalize(publicKey, preparedMsg, blindSignature, invs[i]);
 
 			const isValid = await suite.verify(publicKey, signature, preparedMsg);

@@ -5,11 +5,11 @@ import {
 	TOKEN_TYPES,
 	TokenChallenge,
 	publicVerif,
-	arbitraryBatched,
+	genericBatched,
 	util,
 } from '@cloudflare/privacypass-ts';
 
-const { TokenRequest, Client: BatchedTokensClient, BatchedTokenResponse } = arbitraryBatched;
+const { TokenRequest, Client: BatchedTokensClient, GenericBatchTokenResponse } = genericBatched;
 import { type Token } from '@cloudflare/privacypass-ts';
 const { BlindRSAMode, Client, Origin } = publicVerif;
 
@@ -165,7 +165,7 @@ export async function requestBatchedTokens(
 	if (!response.ok) {
 		throw new Error(`Issuer request failed: ${response.status} ${response.statusText}`);
 	}
-	const tokenResponse = BatchedTokenResponse.deserialize(
+	const tokenResponse = GenericBatchTokenResponse.deserialize(
 		new Uint8Array(await response.arrayBuffer())
 	);
 	const responses = tokenResponse.tokenResponses;
@@ -177,8 +177,8 @@ export async function requestBatchedTokens(
 			continue;
 		}
 		try {
-			const deserializedResponse = publicVerif.TokenResponse.deserialize(res.tokenResponse);
-			const token = await clients[index].finalize(deserializedResponse);
+			// In 0.8.0, tokenResponse is already a TokenResponse object
+			const token = await clients[index].finalize(res.tokenResponse as publicVerif.TokenResponse);
 			tokens.push(token);
 		} catch (err) {
 			console.error(`[Token ${index}] Finalization failed:`, err);

@@ -54,7 +54,7 @@
 		"wrangler": "4.59.3"
 	},
 	"dependencies": {
-		"@cloudflare/privacypass-ts": "0.7.1",
+		"@cloudflare/privacypass-ts": "https://pub-fa946a0b0e0945d38df9ff84ac9b9593.r2.dev/cloudflare-privacypass-ts-0.8.0.tgz",
 		"@sentry/cli": "2.26.0",
 		"@sentry/types": "7.95.0",
 		"@tsndr/cloudflare-worker-jwt": "3.2.1",

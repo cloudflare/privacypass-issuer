@@ -30,7 +30,7 @@ import {
 	PRIVATE_TOKEN_ISSUER_DIRECTORY,
 	TOKEN_TYPES,
 	publicVerif,
-	arbitraryBatched,
+	genericBatched,
 	util,
 } from '@cloudflare/privacypass-ts';
 import { KeyError } from './context/metrics';
@@ -42,7 +42,11 @@ import {
 	getDirectoryCache,
 } from './cache';
 const { BlindRSAMode, Issuer, TokenRequest } = publicVerif;
-const { BatchedTokenRequest, BatchedTokenResponse, Issuer: BatchedTokensIssuer } = arbitraryBatched;
+const {
+	BatchedTokenRequest,
+	GenericBatchTokenResponse,
+	Issuer: BatchedTokensIssuer,
+} = genericBatched;
 
 import { shouldClearKey } from './utils/keyRotation';
 import { WorkerEntrypoint } from 'cloudflare:workers';
@@ -170,7 +174,7 @@ export const handleBatchedTokenRequest = async (
 	// Deserialize the batched token request.
 	const batchedTokenRequest = BatchedTokenRequest.deserialize(new Uint8Array(buffer));
 	if (batchedTokenRequest.tokenRequests.length === 0) {
-		const responseBytes = new BatchedTokenResponse([]).serialize();
+		const responseBytes = new GenericBatchTokenResponse([]).serialize();
 		return {
 			serialized: responseBytes,
 			status: 200,
