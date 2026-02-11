@@ -3,7 +3,6 @@
 
 import { PRIVATE_TOKEN_ISSUER_DIRECTORY } from '@cloudflare/privacypass-ts';
 import { getDirectoryCache, shouldRevalidate, STALE_WHILE_REVALIDATE_IN_MS } from '../src/cache';
-import { default as workerObject } from '../src/index';
 import { MockCache } from './mocks';
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';

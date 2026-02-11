@@ -43,7 +43,7 @@ export async function fetchWithMTLS(mTLS: MTLSConfiguration): Promise<UniversalF
 	// Return a function that accepts a UniversalRequestInit.
 	// We force the result to match the global Response type.
 	return async (url: string, init?: UniversalRequestInit): Promise<Response> => {
-		return (await fetch(url, { ...(init as any), agent } as any)) as unknown as Response;
+		return (await fetch(url, { ...init, agent })) as unknown as Response;
 	};
 }
 

@@ -5,17 +5,17 @@ import {
 	TOKEN_TYPES,
 	TokenChallenge,
 	publicVerif,
-	arbitraryBatched,
+	genericBatched,
 	util,
 } from '@cloudflare/privacypass-ts';
 
-const { TokenRequest, Client: BatchedTokensClient, BatchedTokenResponse } = arbitraryBatched;
+const { TokenRequest, Client: BatchedTokensClient, GenericBatchTokenResponse } = genericBatched;
 import { type Token } from '@cloudflare/privacypass-ts';
 const { BlindRSAMode, Client, Origin } = publicVerif;
 
 import { RequestInit } from 'node-fetch';
 
-import { RequestInit as NodeFetchRequestInit, Response as NodeFetchResponse } from 'node-fetch';
+import { RequestInit as NodeFetchRequestInit } from 'node-fetch';
 // Union type for RequestInit from DOM and node‑fetch
 export type UniversalRequestInit = RequestInit | NodeFetchRequestInit;
 
@@ -69,10 +69,10 @@ export async function getIssuerConfig(
 export async function requestAndFinalizeToken(
 	baseUrl: string,
 	challenge: TokenChallenge,
-	client: any,
+	client: publicVerif.Client,
 	customFetch: UniversalFetch
 	// customFetch: (url: string, init?: RequestInit) => Promise<Response>
-): Promise<{ finalizedToken: any; publicKey: CryptoKey; response: Response }> {
+): Promise<{ finalizedToken: Token; publicKey: CryptoKey; response: Response }> {
 	// Get issuer configuration
 	const { url, publicKey, publicKeyEnc } = await getIssuerConfig(baseUrl, customFetch);
 
@@ -165,7 +165,7 @@ export async function requestBatchedTokens(
 	if (!response.ok) {
 		throw new Error(`Issuer request failed: ${response.status} ${response.statusText}`);
 	}
-	const tokenResponse = BatchedTokenResponse.deserialize(
+	const tokenResponse = GenericBatchTokenResponse.deserialize(
 		new Uint8Array(await response.arrayBuffer())
 	);
 	const responses = tokenResponse.tokenResponses;
@@ -177,8 +177,7 @@ export async function requestBatchedTokens(
 			continue;
 		}
 		try {
-			const deserializedResponse = publicVerif.TokenResponse.deserialize(res.tokenResponse);
-			const token = await clients[index].finalize(deserializedResponse);
+			const token = await clients[index].finalize(res.tokenResponse as publicVerif.TokenResponse);
 			tokens.push(token);
 		} catch (err) {
 			console.error(`[Token ${index}] Finalization failed:`, err);
