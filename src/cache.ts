@@ -122,13 +122,15 @@ export class InMemoryCryptoKeyCache {
 		key: string,
 		setValFn: (key: string) => Promise<CacheElement<CryptoKey>>
 	): Promise<CryptoKey> {
+		const prefixedKey = `${this.ctx.prefix ?? ''}/${key}`;
+
 		const refreshCache = async () => {
 			const val = await setValFn(key);
-			InMemoryCryptoKeyCache.store.set(key, val);
+			InMemoryCryptoKeyCache.store.set(prefixedKey, val);
 			return val.value;
 		};
 
-		const cachedValue = InMemoryCryptoKeyCache.store.get(key);
+		const cachedValue = InMemoryCryptoKeyCache.store.get(prefixedKey);
 		if (cachedValue) {
 			this.ctx.waitUntil(
 				(() => {
