@@ -5,6 +5,7 @@
 	"types": "dist/types/index.d.ts",
 	"main": "dist/worker.mjs",
 	"license": "Apache-2.0",
+	"lockfileVersion": 3,
 	"private": true,
 	"scripts": {
 		"build": "tsc && node scripts/cli.js build && dts-bundle-generator --project tsconfig.types.json --inline-declare-global -o dist/types/index.d.ts src/index.ts",
@@ -39,6 +40,7 @@
 		"@cloudflare/vitest-pool-workers": "0.12.5",
 		"@cloudflare/workers-types": "4.20260122.0",
 		"@types/node": "25.2.3",
+		"@types/node-fetch": "2.6.13",
 		"@typescript-eslint/eslint-plugin": "6.21.0",
 		"@typescript-eslint/parser": "6.21.0",
 		"commander": "12.1.0",
