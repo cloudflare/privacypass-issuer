@@ -273,13 +273,19 @@ export class WshimLogger {
 			if (this.defaultFields.source_service !== 'unit-tests') {
 				console.log('logs flushing is disabled');
 			}
+			const SEP = '__';
 			for (const entry of this.logs) {
+				// Prevents CWE-117: https://cwe.mitre.org/data/definitions/117.html
+				const msg = entry.message
+					.replaceAll('\r\n', SEP)
+					.replaceAll('\n', SEP)
+					.replaceAll('\r', SEP);
 				switch (entry.log_level) {
 					case 'error':
-						console.error(entry.error ?? 'unknown error', entry.message);
+						console.error(entry.error ?? 'unknown error', msg);
 						break;
 					default:
-						console.log(entry.message);
+						console.log(msg);
 				}
 			}
 			return;
