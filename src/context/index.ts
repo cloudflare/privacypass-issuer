@@ -64,7 +64,6 @@ export type WaitUntilFunc = (p: Promise<unknown>) => void;
 export class Context {
 	public hostname: string;
 	public startTime: number;
-	private promises: Promise<unknown>[] = [];
 	public bucket: { ISSUANCE_KEYS: CachedR2Bucket };
 	public performance: Performance;
 	public serviceInfo?: ServiceInfo;
@@ -125,12 +124,8 @@ export class Context {
 	 *
 	 * Flush out any pending metrics/logs that were scheduled via waitUntil.
 	 */
-	public async postProcessing(): Promise<void> {
-		await Promise.all([
-			this.waitForPromises(),
-			this.metrics.publish(),
-			this.wshimLogger.flushLogs(),
-		]);
+	public flushTelemetry() {
+		this._waitUntil(Promise.all([this.metrics.publish(), this.wshimLogger.flushLogs()]));
 	}
 
 	isTest(): boolean {
@@ -143,27 +138,6 @@ export class Context {
 	 */
 	waitUntil(p: Promise<unknown>): void {
 		// inform runtime of async task
-		this._waitUntil(p);
-		this.promises.push(
-			p.catch((e: Error) => {
-				this.wshimLogger.error(e);
-			})
-		);
-	}
-
-	/**
-	 * Waits for promises to complete in the order that they were registered.
-	 *
-	 * @remark
-	 * It is important to wait for the promises in the array to complete sequentially since new promises created by async tasks may be added to the end of the array while this function runs.
-	 */
-	async waitForPromises(): Promise<void> {
-		for (let i = 0; i < this.promises.length; i++) {
-			try {
-				await this.promises[i];
-			} catch (e) {
-				this.wshimLogger.error(e);
-			}
-		}
+		this._waitUntil(p.catch((e: Error) => this.wshimLogger.error(e)));
 	}
 }

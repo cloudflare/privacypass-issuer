@@ -575,7 +575,7 @@ export class IssuerHandler extends WorkerEntrypoint<Bindings> {
 
 			ctx.metrics.requestsTotal.inc(labels);
 			ctx.metrics.requestsDurationMs.observe(duration, labels);
-			ctx.waitUntil(ctx.postProcessing());
+			ctx.flushTelemetry();
 		}
 	}
 }
@@ -607,7 +607,7 @@ export default {
 			});
 			throw err;
 		} finally {
-			ctx.waitUntil(context.postProcessing());
+			context.flushTelemetry();
 		}
 	},
 };
