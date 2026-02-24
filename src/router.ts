@@ -176,7 +176,7 @@ export class Router {
 			response = await handleError(ctx, e as Error, { path, status });
 		}
 		ctx.metrics.requestsDurationMs.observe(ctx.performance.now() - ctx.startTime, { path });
-		ectx.waitUntil(ctx.postProcessing());
+		ctx.flushTelemetry();
 		return response;
 	}
 }
