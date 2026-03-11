@@ -2,7 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Bindings } from '../bindings';
-import { APICache, CachedR2Bucket, InMemoryCache, CascadingCache } from '../cache';
+import {
+	APICache,
+	CachedR2Bucket,
+	InMemoryCache,
+	CascadingCache,
+	DEFAULT_R2_BUCKET_CACHE_TTL_IN_MS,
+} from '../cache';
 import { asyncRetries, DEFAULT_RETRIES } from '../utils/promises';
 import { Logger, WshimLogger } from './logging';
 import { MetricsRegistry } from './metrics';
@@ -85,19 +91,31 @@ export class Context {
 		// eslint-disable-next-line @typescript-eslint/no-this-alias
 		const ctx = this;
 
-		const parseCacheMaxAge = () => {
-			return env.DIRECTORY_CACHE_MAX_AGE_SECONDS === null
-				? DEFAULT_DIRECTORY_CACHE_MAX_AGE_SECONDS
-				: Number.parseInt(env.DIRECTORY_CACHE_MAX_AGE_SECONDS);
+		type StringOrNullKeys<T> = {
+			[K in keyof T]: T[K] extends string | null ? K : never;
+		}[keyof T];
+
+		const parseCacheTTL = (field: StringOrNullKeys<typeof env>, fallback: number) => {
+			const value = env[field];
+			return value === null ? fallback : Number.parseInt(value);
 		};
 		this.cacheSettings = {
 			enabled: env.USE_CACHE_API === 'true',
-			maxAgeSeconds: parseCacheMaxAge(),
+			maxAgeSeconds: parseCacheTTL(
+				'DIRECTORY_CACHE_MAX_AGE_SECONDS',
+				DEFAULT_DIRECTORY_CACHE_MAX_AGE_SECONDS
+			),
 		};
 		const cache = this.cacheSettings.enabled
 			? new CascadingCache(new InMemoryCache(ctx), new APICache(ctx, 'r2/issuance_keys'))
 			: new InMemoryCache(ctx);
-		const cachedR2Bucket = new CachedR2Bucket(ctx, env.ISSUANCE_KEYS, cache, prefix);
+		const cachedR2Bucket = new CachedR2Bucket(
+			ctx,
+			env.ISSUANCE_KEYS,
+			cache,
+			prefix,
+			parseCacheTTL('R2_BUCKET_CACHE_TTL_IN_MS', DEFAULT_R2_BUCKET_CACHE_TTL_IN_MS)
+		);
 
 		const cachedR2BucketWithRetries = new Proxy(cachedR2Bucket, {
 			get: (target, prop, receiver) => {

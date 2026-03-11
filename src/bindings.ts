@@ -6,6 +6,7 @@ import type { R2Bucket, Performance } from '@cloudflare/workers-types/2023-07-01
 export interface Bindings {
 	// variables and secrets
 	DIRECTORY_CACHE_MAX_AGE_SECONDS: string | null;
+	R2_BUCKET_CACHE_TTL_IN_MS: string | null;
 	USE_CACHE_API: string | null;
 	ENVIRONMENT: string;
 	SERVICE: string;
@@ -76,6 +77,7 @@ export function checkMandatoryBindings(env: UncheckedBindings): Bindings {
 
 	return {
 		DIRECTORY_CACHE_MAX_AGE_SECONDS: env.DIRECTORY_CACHE_MAX_AGE_SECONDS ?? null,
+		R2_BUCKET_CACHE_TTL_IN_MS: env.R2_BUCKET_CACHE_TTL_IN_MS ?? null,
 		USE_CACHE_API: env.USE_CACHE_API ?? null,
 		ENVIRONMENT: env.ENVIRONMENT,
 		SERVICE: env.SERVICE,
