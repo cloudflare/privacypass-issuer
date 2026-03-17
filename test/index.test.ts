@@ -7,6 +7,7 @@ import { Context } from '../src/context';
 import {
 	handleTokenRequest,
 	handleClearKey,
+	handleRotateKey,
 	default as workerObject,
 	handleTokenDirectory,
 } from '../src/index';
@@ -426,6 +427,42 @@ describe('shouldClearKey Function', () => {
 			clearDateMocks();
 		}
 	);
+});
+
+describe('rotation R2 write failure', () => {
+	let ctx: Context;
+
+	beforeEach(() => {
+		ctx = getContext({
+			request: new Request(sampleURL),
+			env,
+			ectx: new createExecutionContext(),
+		});
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it('should increment keyRotationWriteFailureTotal and re-throw when R2 put fails', async () => {
+		const r2Error = new Error('R2 service unavailable');
+		vi.spyOn(ctx.env.ISSUANCE_KEYS, 'put').mockRejectedValue(r2Error);
+
+		const before = ctx.metrics.keyRotationWriteFailureTotal.get()?.value ?? 0;
+		await expect(handleRotateKey(ctx, new Request(sampleURL))).rejects.toThrow(r2Error);
+		const after = ctx.metrics.keyRotationWriteFailureTotal.get()?.value ?? 0;
+
+		expect(after - before).toBe(1);
+	});
+
+	it('should not increment keyRotationWriteFailureTotal on successful rotation', async () => {
+		const before = ctx.metrics.keyRotationWriteFailureTotal.get()?.value ?? 0;
+		const response = await handleRotateKey(ctx, new Request(sampleURL));
+		const after = ctx.metrics.keyRotationWriteFailureTotal.get()?.value ?? 0;
+
+		expect(response.status).toBe(201);
+		expect(after - before).toBe(0);
+	});
 });
 
 describe('Integration Test for Key Clearing with Mocked Date', () => {
