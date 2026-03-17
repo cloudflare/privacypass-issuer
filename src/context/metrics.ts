@@ -41,6 +41,7 @@ export class MetricsRegistry {
 	issuanceKeyErrorTotal: CounterType;
 	issuanceRequestTotal: CounterType;
 	lastRotationTimestamp: CounterType;
+	keyRotationWriteFailureTotal: CounterType;
 	keyClearTotal: CounterType;
 	requestsDurationMs: HistogramType;
 	requestsTotal: CounterType;
@@ -93,6 +94,11 @@ export class MetricsRegistry {
 			'gauge',
 			'last_rotation_timestamp',
 			'last time a rotation happened'
+		);
+		this.keyRotationWriteFailureTotal = this.create(
+			'counter',
+			'key_rotation_write_failure_total',
+			'Number of times a key rotation failed to write the new key to R2.'
 		);
 		this.keyClearTotal = this.create(
 			'counter',

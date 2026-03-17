@@ -133,6 +133,7 @@ declare class MetricsRegistry {
 	issuanceKeyErrorTotal: CounterType;
 	issuanceRequestTotal: CounterType;
 	lastRotationTimestamp: CounterType;
+	keyRotationWriteFailureTotal: CounterType;
 	keyClearTotal: CounterType;
 	requestsDurationMs: HistogramType;
 	requestsTotal: CounterType;
@@ -187,7 +188,6 @@ declare class Context {
 	readonly prefix?: string | undefined;
 	hostname: string;
 	startTime: number;
-	private promises;
 	bucket: {
 		ISSUANCE_KEYS: CachedR2Bucket;
 	};
@@ -203,20 +203,13 @@ declare class Context {
 	 *
 	 * Flush out any pending metrics/logs that were scheduled via waitUntil.
 	 */
-	postProcessing(): Promise<void>;
+	flushTelemetry(): void;
 	isTest(): boolean;
 	/**
 	 * Registers async tasks with the runtime, tracks them internally and adds error reporting for uncaught exceptions
 	 * @param p - Promise for the async task to track
 	 */
 	waitUntil(p: Promise<unknown>): void;
-	/**
-	 * Waits for promises to complete in the order that they were registered.
-	 *
-	 * @remark
-	 * It is important to wait for the promises in the array to complete sequentially since new promises created by async tasks may be added to the end of the array while this function runs.
-	 */
-	waitForPromises(): Promise<void>;
 }
 export declare class KeyBackupWorkflow extends WorkflowEntrypoint<UncheckedBindings> {
 	run(_event: WorkflowEvent<unknown>, step: WorkflowStep): Promise<void>;

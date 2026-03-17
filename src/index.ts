@@ -421,9 +421,14 @@ const rotateKey = async (ctx: Context): Promise<Uint8Array> => {
 		tokenKeyID: tokenKeyID.toString(),
 	};
 
-	await ctx.bucket.ISSUANCE_KEYS.put(tokenKeyID.toString(), privateKey, {
-		customMetadata: metadata,
-	});
+	try {
+		await ctx.bucket.ISSUANCE_KEYS.put(tokenKeyID.toString(), privateKey, {
+			customMetadata: metadata,
+		});
+	} catch (err) {
+		ctx.metrics.keyRotationWriteFailureTotal.inc();
+		throw err;
+	}
 
 	if (ctx.cacheSettings.enabled) {
 		ctx.waitUntil(clearDirectoryCache(ctx));
