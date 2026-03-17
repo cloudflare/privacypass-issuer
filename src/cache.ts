@@ -11,6 +11,12 @@ import { Context } from './context';
 import { b64Tou8, u8ToB64 } from './utils/base64';
 import { PRIVATE_TOKEN_ISSUER_DIRECTORY } from '@cloudflare/privacypass-ts';
 
+export const CacheType = {
+	IN_MEMORY_CRYPTO_KEY_CACHE: 'InMemoryCryptoKeyCache',
+	IN_MEMORY_CACHE: 'InMemoryCache',
+	API_CACHE: 'APICache',
+} as const;
+
 export const getDirectoryCache = async (): Promise<Cache> => {
 	return caches.open('response/issuer-directory');
 };
@@ -136,7 +142,7 @@ export class InMemoryCryptoKeyCache {
 				(() => {
 					const expiration = new Date(cachedValue.expiration.getTime());
 					if (shouldRevalidate(expiration)) {
-						this.ctx.metrics.cacheRefreshed.inc({ cache: 'InMemoryCryptoKeyCache' });
+						this.ctx.metrics.cacheRefreshed.inc({ cache: CacheType.IN_MEMORY_CRYPTO_KEY_CACHE });
 						return refreshCache();
 					}
 					return Promise.resolve();
@@ -171,7 +177,7 @@ export class InMemoryCache implements ReadableCache {
 				(() => {
 					const expiration = new Date(cachedValue.expiration.getTime());
 					if (shouldRevalidate(expiration)) {
-						this.ctx.metrics.cacheRefreshed.inc({ cache: 'InMemoryCache' });
+						this.ctx.metrics.cacheRefreshed.inc({ cache: CacheType.IN_MEMORY_CACHE });
 						return refreshCache();
 					}
 					return Promise.resolve();
@@ -222,7 +228,10 @@ export class APICache implements ReadableCache {
 						expirationWithRevalidate.getTime() - STALE_WHILE_REVALIDATE_IN_MS
 					);
 					if (shouldRevalidate(expiration)) {
-						this.ctx.metrics.cacheRefreshed.inc({ cache: 'APICache', cacheKey: this.cacheKey });
+						this.ctx.metrics.cacheRefreshed.inc({
+							cache: CacheType.API_CACHE,
+							cacheKey: this.cacheKey,
+						});
 						return refreshCache();
 					}
 					return Promise.resolve();
