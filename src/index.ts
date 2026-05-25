@@ -51,7 +51,7 @@ const {
 import { shouldClearKey } from './utils/keyRotation';
 import { WorkerEntrypoint } from 'cloudflare:workers';
 
-import { BaseRpcOptions, IssueOptions } from './types';
+import { BaseRpcOptions, IssueOptions, TokenDirectoryOptions } from './types';
 
 export { KeyBackupWorkflow } from './key-backup';
 export {
@@ -536,10 +536,11 @@ export class IssuerHandler extends WorkerEntrypoint<Bindings> {
 		);
 	}
 
-	async tokenDirectory(opts: BaseRpcOptions): Promise<Response> {
-		return this.withMetrics({ op: 'tokenDirectory', ...opts }, ctx =>
-			handleTokenDirectory(ctx, new Request(opts.serviceInfo.url))
-		);
+	async tokenDirectory(opts: TokenDirectoryOptions): Promise<Response> {
+		return this.withMetrics({ op: 'tokenDirectory', ...opts }, ctx => {
+			const headers: Record<string, string> = opts.etag ? { 'if-none-match': opts.etag } : {};
+			return handleTokenDirectory(ctx, new Request(opts.serviceInfo.url, { headers }));
+		});
 	}
 
 	async issue(opts: IssueOptions): Promise<IssueResponse> {
