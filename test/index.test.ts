@@ -10,8 +10,9 @@ import {
 	handleRotateKey,
 	default as workerObject,
 	handleTokenDirectory,
+	IssuerHandler,
 } from '../src/index';
-import { IssuerConfigurationResponse } from '../src/types';
+import { IssuerConfigurationResponse, TokenDirectoryOptions } from '../src/types';
 import { b64ToB64URL, u8ToB64 } from '../src/utils/base64';
 import { MockCache, mockDateNow, clearDateMocks, getContext } from './mocks';
 import { RSABSSA } from '@cloudflare/blindrsa-ts';
@@ -344,6 +345,98 @@ describe('directory', () => {
 		expect(response.status).toBe(304);
 
 		spy.mockClear();
+	});
+
+	describe('RPC tokenDirectory', () => {
+		const makeOpts = (etag?: string): TokenDirectoryOptions => ({
+			serviceInfo: { url: sampleURL, route: '/token-directory', service: 'test' },
+			...(etag !== undefined ? { etag } : {}),
+		});
+
+		it('should return 304 when etag matches cached response', async () => {
+			const mockCaches: Map<string, MockCache> = new Map();
+			const spy = vi.spyOn(caches, 'open').mockImplementation(async (name: string) => {
+				if (!mockCaches.has(name)) {
+					mockCaches.set(name, new MockCache());
+				}
+				return mockCaches.get(name) as unknown as Cache;
+			});
+
+			const ectx = new createExecutionContext();
+			const handler = new IssuerHandler(ectx, env);
+
+			// First call to populate the cache
+			const response = await handler.tokenDirectory(makeOpts());
+			expect(response.ok).toBe(true);
+
+			// Inject a cached response with a known etag
+			const mockCache = (await getDirectoryCache()) as unknown as MockCache;
+			const [cachedURL] = Object.entries(mockCache.cache)[0];
+			const sampleEtag = '"rpcTestEtag"';
+			mockCache.cache[cachedURL] = new Response('cached', { headers: { etag: sampleEtag } });
+
+			// Call with matching etag — should get 304
+			const notModified = await handler.tokenDirectory(makeOpts(sampleEtag));
+			expect(notModified.status).toBe(304);
+
+			spy.mockClear();
+		});
+
+		it('should return full response when etag does not match', async () => {
+			const mockCaches: Map<string, MockCache> = new Map();
+			const spy = vi.spyOn(caches, 'open').mockImplementation(async (name: string) => {
+				if (!mockCaches.has(name)) {
+					mockCaches.set(name, new MockCache());
+				}
+				return mockCaches.get(name) as unknown as Cache;
+			});
+
+			const ectx = new createExecutionContext();
+			const handler = new IssuerHandler(ectx, env);
+
+			// First call to populate the cache
+			await handler.tokenDirectory(makeOpts());
+
+			// Inject a cached response with a known etag
+			const mockCache = (await getDirectoryCache()) as unknown as MockCache;
+			const [cachedURL] = Object.entries(mockCache.cache)[0];
+			const cachedEtag = '"cachedEtag"';
+			mockCache.cache[cachedURL] = new Response('cached', {
+				headers: { etag: cachedEtag },
+			});
+
+			// Call with non-matching etag — should get the cached response (200)
+			const response = await handler.tokenDirectory(makeOpts('"differentEtag"'));
+			expect(response.ok).toBe(true);
+			expect(response.headers.get('etag')).toBe(cachedEtag);
+
+			spy.mockClear();
+		});
+
+		it('should return full response when no etag is provided', async () => {
+			const ectx = new createExecutionContext();
+			const handler = new IssuerHandler(ectx, env);
+
+			// Call without etag
+			const response = await handler.tokenDirectory(makeOpts());
+			expect(response.ok).toBe(true);
+
+			const directory = (await response.json()) as IssuerConfigurationResponse;
+			expect(directory['token-keys']).toBeDefined();
+		});
+
+		it('should handle undefined etag gracefully (backward compatibility)', async () => {
+			const ectx = new createExecutionContext();
+			const handler = new IssuerHandler(ectx, env);
+
+			// Simulate an old caller that doesn't pass etag at all
+			const opts = {
+				serviceInfo: { url: sampleURL, route: '/token-directory', service: 'test' },
+			} as TokenDirectoryOptions;
+
+			const response = await handler.tokenDirectory(opts);
+			expect(response.ok).toBe(true);
+		});
 	});
 
 	it('should return cache headers even if caching is disabled', async () => {

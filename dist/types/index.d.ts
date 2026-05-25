@@ -170,6 +170,9 @@ export interface IssueOptions extends BaseRpcOptions {
 	tokenRequest: ArrayBuffer;
 	contentType: string;
 }
+export interface TokenDirectoryOptions extends BaseRpcOptions {
+	etag?: string;
+}
 declare class WshimOptions {
 	readonly token: string;
 	readonly socket: Fetcher;
@@ -261,7 +264,7 @@ export declare const handleClearKey: (ctx: Context, _request: Request) => Promis
 export declare class IssuerHandler extends WorkerEntrypoint<Bindings> {
 	private context;
 	fetch(request: Request): Promise<Response>;
-	tokenDirectory(opts: BaseRpcOptions): Promise<Response>;
+	tokenDirectory(opts: TokenDirectoryOptions): Promise<Response>;
 	issue(opts: IssueOptions): Promise<IssueResponse>;
 	rotateKey(opts: BaseRpcOptions): Promise<Uint8Array>;
 	clearKey(opts: BaseRpcOptions): Promise<string[]>;

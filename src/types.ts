@@ -39,3 +39,7 @@ export interface IssueOptions extends BaseRpcOptions {
 	tokenRequest: ArrayBuffer;
 	contentType: string;
 }
+
+export interface TokenDirectoryOptions extends BaseRpcOptions {
+	etag?: string;
+}
