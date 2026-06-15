@@ -5,7 +5,7 @@ Privacy Pass Issuer ([Draft 16](https://www.ietf.org/archive/id/draft-ietf-priva
 ## Deploy
 
 ```bash
-npm run deploy:production
+pnpm run deploy:production
 ```
 
 ## Token type
@@ -19,7 +19,7 @@ All endpoints are public by default. Authentication should be a second layer. In
 
 ## Test token issuance
 
-One can test token issuance locally using `npm run test:e2e -- <issuer-name>` target. If the issuer uses mTLS (Mutual TLS), you can use `npm run test:e2e -- --cert <path> --key <path> <issuer-name>`.
+One can test token issuance locally using `pnpm run test:e2e -- <issuer-name>` target. If the issuer uses mTLS (Mutual TLS), you can use `pnpm run test:e2e -- --cert <path> --key <path> <issuer-name>`.
 
 ## Key Rotation
 
