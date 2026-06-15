@@ -4,7 +4,7 @@ workers_dev = false # Enable it for development purposes, and if you are want a 
 account_id = "your-account-id-here" # Log in dash.cloudflare.com, select an account, go to Workers, and copy Account ID
 
 [build]
-command = "npm install && npm run build"
+command = "pnpm install --frozen-lockfile && pnpm build"
 
 [env.production]
 name = "pp-issuer-production"

@@ -6,6 +6,7 @@
 	"main": "dist/worker.mjs",
 	"license": "Apache-2.0",
 	"private": true,
+	"packageManager": "pnpm@10.19.0",
 	"scripts": {
 		"build": "tsc && node scripts/cli.js build && dts-bundle-generator --project tsconfig.types.json --inline-declare-global -o dist/types/index.d.ts src/index.ts",
 		"deploy:production": "wrangler deploy --no-bundle --env production",
@@ -13,7 +14,7 @@
 		"format": "prettier --write  '*.{json,js}' 'scripts/*.{js,ts}' 'src/**/*.{js,ts}' 'test/**/*.{js,ts}'",
 		"lint": "eslint src && prettier --check '*.{json,js}' 'scripts/*.{js,ts}' 'src/**/*.{js,ts}' 'test/**/*.{js,ts}'",
 		"test:e2e": "tsc -b ./test/e2e && node --experimental-vm-modules --no-warnings dist/index.js",
-		"test": "npm run build && vitest --project tests --run"
+		"test": "pnpm build && vitest --project tests --run"
 	},
 	"eslintConfig": {
 		"root": true,
