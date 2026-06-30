@@ -132,7 +132,6 @@ declare class MetricsRegistry {
 	erroredRequestsTotal: CounterType;
 	issuanceKeyErrorTotal: CounterType;
 	issuanceRequestTotal: CounterType;
-	lastRotationTimestamp: CounterType;
 	keyRotationWriteFailureTotal: CounterType;
 	keyClearTotal: CounterType;
 	requestsDurationMs: HistogramType;

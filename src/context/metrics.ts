@@ -40,7 +40,6 @@ export class MetricsRegistry {
 	erroredRequestsTotal: CounterType;
 	issuanceKeyErrorTotal: CounterType;
 	issuanceRequestTotal: CounterType;
-	lastRotationTimestamp: CounterType;
 	keyRotationWriteFailureTotal: CounterType;
 	keyClearTotal: CounterType;
 	requestsDurationMs: HistogramType;
@@ -89,11 +88,6 @@ export class MetricsRegistry {
 			'counter',
 			'issuance_request_total',
 			'Number of requests for private token issuance.'
-		);
-		this.lastRotationTimestamp = this.create(
-			'gauge',
-			'last_rotation_timestamp',
-			'last time a rotation happened'
 		);
 		this.keyRotationWriteFailureTotal = this.create(
 			'counter',

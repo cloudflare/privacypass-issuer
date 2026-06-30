@@ -436,7 +436,6 @@ const rotateKey = async (ctx: Context): Promise<Uint8Array> => {
 
 	ctx.wshimLogger.log(`Key rotated successfully, new key ${tokenKeyID}`);
 
-	ctx.metrics.lastRotationTimestamp.set(Date.now());
 	return rsaSsaPssPublicKey;
 };
 
