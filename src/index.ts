@@ -87,6 +87,7 @@ interface BlindRSAKeyPairWithMetadata {
 	sk: CryptoKey;
 	pk: CryptoKey;
 	notBefore: number;
+	keyAge: number;
 }
 
 /**
@@ -100,6 +101,7 @@ export interface IssueResponse {
 	status: number;
 	responseContentType: string;
 	notBefore?: number;
+	keyAge: number;
 }
 
 export const issue = async (
@@ -151,7 +153,7 @@ export const handleSingleTokenRequest = async (
 		throw new InvalidTokenTypeError();
 	}
 	const keyID = tokenRequest.truncatedTokenKeyId;
-	const { sk, pk } = await getBlindRSAKeyPair(ctx, keyID);
+	const { sk, pk, keyAge } = await getBlindRSAKeyPair(ctx, keyID);
 	const issuer = new Issuer(BlindRSAMode.PSS, domain, sk, pk, { supportsRSARAW: true });
 	const signedToken = await issuer.issue(tokenRequest);
 
@@ -163,6 +165,7 @@ export const handleSingleTokenRequest = async (
 		serialized: signedToken.serialize(),
 		status: 200,
 		responseContentType: MediaType.PRIVATE_TOKEN_RESPONSE,
+		keyAge,
 	};
 };
 
@@ -179,6 +182,7 @@ export const handleBatchedTokenRequest = async (
 			serialized: responseBytes,
 			status: 200,
 			responseContentType: MediaType.ARBITRARY_BATCHED_TOKEN_RESPONSE,
+			keyAge: -1,
 			// notBefore may not be relevant if there are no tokens but could be set to a default value if needed.
 		};
 	}
@@ -195,7 +199,7 @@ export const handleBatchedTokenRequest = async (
 		}
 	}
 
-	const { sk, pk, notBefore } = await getBlindRSAKeyPair(ctx, keyID);
+	const { sk, pk, notBefore, keyAge } = await getBlindRSAKeyPair(ctx, keyID);
 	const issuer = new Issuer(BlindRSAMode.PSS, domain, sk, pk, { supportsRSARAW: true });
 	const batchedTokenIssuer = new BatchedTokensIssuer(issuer);
 	const batchedTokenResponse = await batchedTokenIssuer.issue(batchedTokenRequest);
@@ -218,6 +222,7 @@ export const handleBatchedTokenRequest = async (
 		status,
 		responseContentType: MediaType.ARBITRARY_BATCHED_TOKEN_RESPONSE,
 		notBefore,
+		keyAge,
 	};
 };
 
@@ -239,7 +244,7 @@ const getBlindRSAKeyPair = async (
 	const CRYPTO_KEY_EXPIRATION_IN_MS = 300_000; // 5min
 	const cryptoKeyCache = new InMemoryCryptoKeyCache(ctx);
 
-	const sk = await cryptoKeyCache.read(`sk-${keyID}`, async keyID => {
+	const skPromise = cryptoKeyCache.read(`sk-${keyID}`, async keyID => {
 		const privateKey = key.data;
 		if (privateKey === undefined) {
 			ctx.metrics.issuanceKeyErrorTotal.inc({ key_id: keyID, type: KeyError.MISSING_PRIVATE_KEY });
@@ -267,7 +272,7 @@ const getBlindRSAKeyPair = async (
 			throw new BadTokenKeyRequestedError('Invalid private key format');
 		}
 	});
-	const pk = await cryptoKeyCache.read(`pk-${keyID}`, async keyID => {
+	const pkPromise = cryptoKeyCache.read(`pk-${keyID}`, async keyID => {
 		const pkEnc = key?.customMetadata?.publicKey;
 		if (!pkEnc) {
 			ctx.metrics.issuanceKeyErrorTotal.inc({ key_id: keyID, type: KeyError.MISSING_PUBLIC_KEY });
@@ -290,8 +295,18 @@ const getBlindRSAKeyPair = async (
 			throw new BadTokenKeyRequestedError('Invalid public key format');
 		}
 	});
+	const keyAgePromise = (async () => {
+		const keyList = await ctx.bucket.ISSUANCE_KEYS.list({ include: ['customMetadata'] });
+		keyList.objects.sort((a, b) => a.uploaded.getTime() - b.uploaded.getTime());
+		return keyList.objects.findIndex(o => {
+			const keyParts = o.key.split('/');
+			return Number.parseInt(keyParts[keyParts.length - 1]) == keyID;
+		});
+	})();
 
-	return { sk, pk, notBefore };
+	const [sk, pk, keyAge] = await Promise.all([skPromise, pkPromise, keyAgePromise]);
+
+	return { sk, pk, notBefore, keyAge };
 };
 
 export const handleHeadTokenDirectory = async (ctx: Context, request: Request) => {
