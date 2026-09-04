@@ -27,7 +27,7 @@ import {
 	TOKEN_TYPES,
 } from '@cloudflare/privacypass-ts';
 import { getDirectoryCache } from '../src/cache';
-import { shouldClearKey } from '../src/utils/keyRotation';
+import { shouldClearKey, shouldServeKey } from '../src/utils/keyRotation';
 const { TokenRequest, BLIND_RSA } = publicVerif;
 
 const sampleURL = 'http://localhost';
@@ -522,6 +522,34 @@ describe('shouldClearKey Function', () => {
 	);
 });
 
+describe('shouldServeKey Function', () => {
+	const keyNotBefore = new Date('2024-10-01T12:00:00Z');
+	const oneHourInMs = 60 * 60 * 1000;
+	const lifespanInMs = 48 * oneHourInMs;
+	const gracePeriodInMs = 2 * oneHourInMs;
+	it.each`
+		name                                      | now                       | expected
+		${'serve key within lifespan'}            | ${'2024-10-03T11:59:59Z'} | ${true}
+		${'serve key in grace period'}            | ${'2024-10-03T13:59:59Z'} | ${true}
+		${'not serve key after grace period'}     | ${'2024-10-03T14:00:01Z'} | ${false}
+		${'not serve key before notBefore time'}  | ${'2024-10-01T11:59:59Z'} | ${false}
+		${'serve key exactly at notBefore time' } | ${'2024-10-01T12:00:00Z'} | ${true}
+	`(
+		'should $name',
+		({
+			now,
+			expected,
+		}: {
+			now: string;
+			expected: boolean;
+		}) => {
+			const nowDate = new Date(now);
+			const result = shouldServeKey(keyNotBefore, nowDate, lifespanInMs, gracePeriodInMs);
+			expect(result).toBe(expected);
+		}
+	);
+});
+
 describe('rotation R2 write failure', () => {
 	let ctx: Context;
 
@@ -657,4 +685,81 @@ describe('Integration Test for Key Clearing with Mocked Date', () => {
 			}
 		}
 	);
+});
+
+describe('Integration Test for serving the oldest key for a grace period', () => {
+
+	afterEach(() => {
+		vi.useRealTimers();
+		vi.clearAllMocks();
+	});
+
+	it('should serve 3 keys during grace period, then drop to 2 keys after grace expires', async () => {
+		// Setup: Daily rotation schedule with realistic production config
+		// - Rotation happens at 12:30 daily
+		// - Keys have notBefore = rotation_time + 2h = 14:30
+		// - Lifespan = 48h
+		// - Grace period = 2h
+		const oneHourMs = 60 * 60 * 1000;
+		env.KEY_LIFESPAN_IN_MS = (48 * oneHourMs).toFixed();
+		env.KEY_GRACE_PERIOD_IN_MS = (2 * oneHourMs).toFixed();
+		env.MINIMUM_FRESHEST_KEYS = '1';
+		const directoryUrl = `${sampleURL}${PRIVATE_TOKEN_ISSUER_DIRECTORY}`;
+		const ctx = getContext({
+			request: new Request(sampleURL),
+			env,
+			ectx: new createExecutionContext(),
+		});
+
+		const toUnix = (isoDate: string) => (new Date(isoDate).getTime() / 1000).toFixed(0);
+
+		const base = {
+			key: '_global/unused',
+			size: 22,
+			etag: 'etag',
+			version: 'v1',
+			checksums: {},
+			httpEtag: '',
+			customMetadata: { tokenKeyID: '0' },
+		};
+
+		// Create 3 keys (K, K+1, K+2) simulating daily rotations on day 0/1/2 respectively.
+		const fakeKeys = {
+			objects: [
+				{ ...base, uploaded: new Date('2024-10-01T12:30:00Z'), customMetadata: {...base.customMetadata, notBefore: toUnix('2024-10-01T14:30:00Z'), publicKey: 'publicKey_K',},},
+				{ ...base, uploaded: new Date('2024-10-02T12:30:00Z'), customMetadata: {...base.customMetadata, notBefore: toUnix('2024-10-02T14:30:00Z'), publicKey: 'publicKey_K+1',},},
+				{ ...base, uploaded: new Date('2024-10-03T12:30:00Z'), customMetadata: {...base.customMetadata, notBefore: toUnix('2024-10-03T14:30:00Z'), publicKey: 'publicKey_K+2',},},
+			],
+			delimitedPrefixes: [],
+			truncated: false,
+		};
+
+		vi.spyOn(ctx.bucket.ISSUANCE_KEYS, 'list').mockResolvedValue(fakeKeys);
+
+		// Test 1: Before rotation
+		// Should serve: K, K+1
+		vi.setSystemTime(new Date('2024-10-03T13:30:01Z'));
+		const response1 = await handleTokenDirectory(ctx, new Request(directoryUrl));
+		expect(response1.ok).toBe(true);
+		const directory1: IssuerConfigurationResponse = await response1.json();
+		expect(directory1['token-keys']).toHaveLength(2);
+		expect(directory1['token-keys'].map(k => k['token-key'])).not.toContain('publicKey_K+2');
+
+		// Test 2: After rotation but still inside grace period
+		// Should serve: K, K+1, K+2
+		vi.setSystemTime(new Date('2024-10-03T14:30:01Z'));
+		const response2 = await handleTokenDirectory(ctx, new Request(directoryUrl));
+		expect(response2.ok).toBe(true);
+		const directory2: IssuerConfigurationResponse = await response2.json();
+		expect(directory2['token-keys']).toHaveLength(3);
+
+		// Test 3: after grace period ends
+		// Should serve: K+1, K+2
+		vi.setSystemTime(new Date('2024-10-03T16:30:01Z'));
+		const response3 = await handleTokenDirectory(ctx, new Request(directoryUrl));
+		expect(response3.ok).toBe(true);
+		const directory3: IssuerConfigurationResponse = await response3.json();
+		expect(directory3['token-keys']).toHaveLength(2);
+		expect(directory3['token-keys'].map(k => k['token-key'])).not.toContain('publicKey_K');
+	});
 });

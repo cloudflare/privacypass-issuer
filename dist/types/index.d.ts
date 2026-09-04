@@ -49,6 +49,7 @@ export interface Bindings {
 	ROTATION_CRON_STRING: string | null;
 	KEY_LIFESPAN_IN_MS: string;
 	KEY_NOT_BEFORE_DELAY_IN_MS: string;
+	KEY_GRACE_PERIOD_IN_MS: string | null;
 	MINIMUM_FRESHEST_KEYS: string | null;
 	LOGGING_SHIM_TOKEN: string | null;
 	WSHIM_SOCKET: Fetcher | null;
