@@ -43,7 +43,7 @@ export interface Bindings {
 }
 
 export const DEFAULT_MINIMUM_FRESHEST_KEYS = '2';
-export const DEFAULT_KEY_GRACE_PERIOD_IN_MS = '7200000'; // 2 hours
+export const DEFAULT_KEY_GRACE_PERIOD_IN_MS = '0'; // disabled by default (0ms = no grace period)
 
 type NonNullableFields<T> = {
 	[P in keyof T]: T[P] extends infer U | null ? U : T[P];
