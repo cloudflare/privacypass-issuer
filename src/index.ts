@@ -7,6 +7,7 @@
 import {
 	Bindings,
 	DEFAULT_MINIMUM_FRESHEST_KEYS,
+	DEFAULT_KEY_GRACE_PERIOD_IN_MS,
 	UncheckedBindings,
 	checkMandatoryBindings,
 } from './bindings';
@@ -48,7 +49,7 @@ const {
 	Issuer: BatchedTokensIssuer,
 } = genericBatched;
 
-import { shouldClearKey } from './utils/keyRotation';
+import { shouldClearKey, shouldServeKey } from './utils/keyRotation';
 import { WorkerEntrypoint } from 'cloudflare:workers';
 
 import { BaseRpcOptions, IssueOptions, TokenDirectoryOptions } from './types';
@@ -332,13 +333,32 @@ export const handleTokenDirectory = async (ctx: Context, request: Request) => {
 		throw new Error('Issuer not initialised');
 	}
 
-	// there is no reason for an auditor to continue serving keys beyond the minimum requirement
 	const freshestKeyCount = Number.parseInt(
 		ctx.env.MINIMUM_FRESHEST_KEYS ?? DEFAULT_MINIMUM_FRESHEST_KEYS
 	);
-	const keys = keyList.objects
-		.sort((a, b) => new Date(b.uploaded).getTime() - new Date(a.uploaded).getTime())
-		.slice(0, freshestKeyCount);
+	const lifespanInMs = Number.parseInt(ctx.env.KEY_LIFESPAN_IN_MS);
+	const gracePeriodInMs = Number.parseInt(
+		ctx.env.KEY_GRACE_PERIOD_IN_MS ?? DEFAULT_KEY_GRACE_PERIOD_IN_MS
+	);
+	const now = new Date();
+
+	// Try to filter keys based on validity and grace period
+	let keys = keyList.objects.filter(key => {
+		const notBefore = key.customMetadata?.notBefore;
+		const keyNotBefore = notBefore
+			? new Date(Number.parseInt(notBefore) * 1000)
+			: new Date(key.uploaded);
+		return shouldServeKey(keyNotBefore, now, lifespanInMs, gracePeriodInMs);
+	})
+	.sort((a, b) => new Date(b.uploaded).getTime() - new Date(a.uploaded).getTime());
+
+	// Fallback: if no keys pass the filter serve the freshest N keys. This can happen at
+	// first deploy or disaster recovery where all keys are new
+	if (keys.length === 0) {
+		keys = keyList.objects
+			.sort((a, b) => new Date(b.uploaded).getTime() - new Date(a.uploaded).getTime())
+			.slice(0, freshestKeyCount);
+	}
 
 	const directory: IssuerConfigurationResponse = {
 		'issuer-request-uri': '/token-request',
@@ -453,6 +473,9 @@ const clearKey = async (ctx: Context): Promise<string[]> => {
 	}
 
 	const lifespanInMs = Number.parseInt(ctx.env.KEY_LIFESPAN_IN_MS);
+	const gracePeriodInMs = Number.parseInt(
+		ctx.env.KEY_GRACE_PERIOD_IN_MS ?? DEFAULT_KEY_GRACE_PERIOD_IN_MS
+	);
 	const freshestKeyCount = Number.parseInt(
 		ctx.env.MINIMUM_FRESHEST_KEYS ?? DEFAULT_MINIMUM_FRESHEST_KEYS
 	);
@@ -477,7 +500,8 @@ const clearKey = async (ctx: Context): Promise<string[]> => {
 			continue;
 		}
 
-		const shouldDelete = shouldClearKey(keyNotBefore, lifespanInMs);
+		// Delete keys that have exceeded their lifespan + grace period
+		const shouldDelete = shouldClearKey(keyNotBefore, lifespanInMs + gracePeriodInMs);
 
 		if (shouldDelete) {
 			toDelete.add(key.key);

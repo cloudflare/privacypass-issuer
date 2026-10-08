@@ -27,6 +27,7 @@ export interface Bindings {
 	ROTATION_CRON_STRING: string | null;
 	KEY_LIFESPAN_IN_MS: string;
 	KEY_NOT_BEFORE_DELAY_IN_MS: string;
+	KEY_GRACE_PERIOD_IN_MS: string | null;
 	MINIMUM_FRESHEST_KEYS: string | null;
 
 	// telemetry
@@ -42,6 +43,7 @@ export interface Bindings {
 }
 
 export const DEFAULT_MINIMUM_FRESHEST_KEYS = '2';
+export const DEFAULT_KEY_GRACE_PERIOD_IN_MS = '0'; // disabled by default (0ms = no grace period)
 
 type NonNullableFields<T> = {
 	[P in keyof T]: T[P] extends infer U | null ? U : T[P];
@@ -89,6 +91,7 @@ export function checkMandatoryBindings(env: UncheckedBindings): Bindings {
 		ROTATION_CRON_STRING: env.ROTATION_CRON_STRING ?? null,
 		KEY_LIFESPAN_IN_MS: env.KEY_LIFESPAN_IN_MS,
 		KEY_NOT_BEFORE_DELAY_IN_MS: env.KEY_NOT_BEFORE_DELAY_IN_MS,
+		KEY_GRACE_PERIOD_IN_MS: env.KEY_GRACE_PERIOD_IN_MS ?? null,
 		MINIMUM_FRESHEST_KEYS: env.MINIMUM_FRESHEST_KEYS ?? null,
 		LOGGING_SHIM_TOKEN: env.LOGGING_SHIM_TOKEN ?? null,
 		WSHIM_SOCKET: env.WSHIM_SOCKET ?? null,
